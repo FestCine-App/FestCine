@@ -41,6 +41,8 @@ urlpatterns = [
     re_path(r'^patrocinadores/(?P<id>\d+)/$', views.patrocinadores, name='patrocinadores-detail'),
 
     path('patrocinios/', views.patrocinios, name='patrocinios'),
+    re_path(r'^patrocinios/(?P<id>\d+)/$', views.patrocinios, name='patrocinios-detail'),
+
 
     path('ediciones/', views.ediciones, name='ediciones-list'),
     re_path(r'^ediciones/(?P<id>\d+)/$', views.ediciones, name='ediciones-detail'),
@@ -58,6 +60,8 @@ urlpatterns = [
     re_path(r'^premios/(?P<id>\d+)/$', views.premios, name='premios-detail'),
 
     path('competencia/', views.competencia, name='competencia'),
+    path('roles/', views.roles_pelicula, name='roles-pelicula'),
+
 
     path('tarifas/', views.tarifas, name='tarifas'),
     path('tipos-abono/', views.tiposabono, name='tiposabono'),

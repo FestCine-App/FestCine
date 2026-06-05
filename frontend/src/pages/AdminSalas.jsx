@@ -15,78 +15,112 @@ export default function AdminSalas() {
 
   const crearSede = async (e) => {
     e.preventDefault()
-    try { await api.createSede(formSede); setMsg('Sede creada'); setFormSede({ NombreSede: '', Direccion: '', Ciudad: '', SitioWeb: '' }); api.getSedes().then(setSedes) }
-    catch (err) { setMsg('Error: ' + err.message) }
+    try { 
+      await api.createSede(formSede)
+      setMsg('Sede del festival creada exitosamente')
+      setFormSede({ NombreSede: '', Direccion: '', Ciudad: '', SitioWeb: '' })
+      api.getSedes().then(setSedes) 
+    } catch (err) { setMsg('Error: ' + err.message) }
   }
 
   const crearSala = async (e) => {
     e.preventDefault()
-    try { await api.createSala({ ...formSala, Capacidad: parseInt(formSala.Capacidad), IdSede: parseInt(formSala.IdSede) }); setMsg('Sala creada'); setFormSala({ NombreSala: '', Capacidad: '', IdSede: '' }); api.getSalas().then(setSalas) }
-    catch (err) { setMsg('Error: ' + err.message) }
+    try { 
+      await api.createSala({ ...formSala, Capacidad: parseInt(formSala.Capacidad), IdSede: parseInt(formSala.IdSede) })
+      setMsg('Sala de proyección creada exitosamente')
+      setFormSala({ NombreSala: '', Capacidad: '', IdSede: '' })
+      api.getSalas().then(setSalas) 
+    } catch (err) { setMsg('Error: ' + err.message) }
   }
 
   return (
-    <div>
-      <h2 style={{ marginTop: 0 }}>Gestión de Sedes y Salas</h2>
+    <div className="animate-fade-in">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+        <div>
+          <h2 style={{ fontSize: 28, fontWeight: 800, margin: 0 }}>Gestión de Sedes y Salas</h2>
+          <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginTop: 4 }}>
+            Configure las salas de cine y las sedes físicas que albergan las proyecciones del festival.
+          </p>
+        </div>
+        {msg && <div style={{ padding: '8px 16px', background: 'rgba(139, 92, 246, 0.15)', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: 8, fontSize: 13, color: '#c084fc', fontWeight: 600 }}>{msg}</div>}
+      </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 24 }}>
-        <div style={{ background: '#fff', padding: 20, borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-          <h3 style={{ margin: '0 0 12px', fontSize: 16 }}>Nueva Sede</h3>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 24, marginBottom: 24 }}>
+        <div className="glass-card">
+          <h3 style={{ fontSize: 18, marginBottom: 16 }}>Nueva Sede</h3>
           <form onSubmit={crearSede}>
-            <div style={{ marginBottom: 12 }}>
-              <input placeholder="Nombre de la Sede" style={inp} value={formSede.NombreSede} onChange={e => setFormSede({ ...formSede, NombreSede: e.target.value })} required />
+            <div className="form-group">
+              <label className="form-label">Nombre de Sede *</label>
+              <input placeholder="Ej. Multicine Santa Cruz" className="input" value={formSede.NombreSede} onChange={e => setFormSede({ ...formSede, NombreSede: e.target.value })} required />
             </div>
-            <div style={{ marginBottom: 12 }}>
-              <input placeholder="Dirección" style={inp} value={formSede.Direccion} onChange={e => setFormSede({ ...formSede, Direccion: e.target.value })} />
+            <div className="form-group">
+              <label className="form-label">Dirección</label>
+              <input placeholder="Ej. Av. Las Américas 450" className="input" value={formSede.Direccion} onChange={e => setFormSede({ ...formSede, Direccion: e.target.value })} />
             </div>
-            <div style={{ marginBottom: 12 }}>
-              <input placeholder="Ciudad" style={inp} value={formSede.Ciudad} onChange={e => setFormSede({ ...formSede, Ciudad: e.target.value })} />
+            <div className="form-group">
+              <label className="form-label">Ciudad</label>
+              <input placeholder="Ej. Santa Cruz" className="input" value={formSede.Ciudad} onChange={e => setFormSede({ ...formSede, Ciudad: e.target.value })} />
             </div>
-            <div style={{ marginBottom: 12 }}>
-              <input placeholder="Sitio Web" style={inp} value={formSede.SitioWeb} onChange={e => setFormSede({ ...formSede, SitioWeb: e.target.value })} />
+            <div className="form-group">
+              <label className="form-label">Sitio Web / URL Sede</label>
+              <input placeholder="Ej. www.multicine.com.bo" className="input" value={formSede.SitioWeb} onChange={e => setFormSede({ ...formSede, SitioWeb: e.target.value })} />
             </div>
-            <button type="submit" style={btn}>Crear Sede</button>
+            <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: 12 }}>Crear Sede</button>
           </form>
         </div>
 
-        <div style={{ background: '#fff', padding: 20, borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-          <h3 style={{ margin: '0 0 12px', fontSize: 16 }}>Nueva Sala</h3>
+        <div className="glass-card">
+          <h3 style={{ fontSize: 18, marginBottom: 16 }}>Nueva Sala</h3>
           <form onSubmit={crearSala}>
-            <div style={{ marginBottom: 12 }}>
-              <select style={inp} value={formSala.IdSede} onChange={e => setFormSala({ ...formSala, IdSede: e.target.value })} required>
-                <option value="">Seleccionar Sede</option>
-                {sedes.map(s => <option key={s.IdSede} value={s.IdSede}>{s.NombreSede}</option>)}
+            <div className="form-group">
+              <label className="form-label">Sede de Ubicación *</label>
+              <select className="select" value={formSala.IdSede} onChange={e => setFormSala({ ...formSala, IdSede: e.target.value })} required>
+                <option value="">Seleccionar Sede...</option>
+                {sedes.map(s => <option key={s.IdSede} value={s.IdSede}>{s.NombreSede} ({s.Ciudad || 'Ciudad no especificada'})</option>)}
               </select>
             </div>
-            <div style={{ marginBottom: 12 }}>
-              <input placeholder="Nombre de la Sala" style={inp} value={formSala.NombreSala} onChange={e => setFormSala({ ...formSala, NombreSala: e.target.value })} required />
+            <div className="form-group">
+              <label className="form-label">Nombre de la Sala *</label>
+              <input placeholder="Ej. Sala 1 - IMAX" className="input" value={formSala.NombreSala} onChange={e => setFormSala({ ...formSala, NombreSala: e.target.value })} required />
             </div>
-            <div style={{ marginBottom: 12 }}>
-              <input placeholder="Capacidad" type="number" style={inp} value={formSala.Capacidad} onChange={e => setFormSala({ ...formSala, Capacidad: e.target.value })} required />
+            <div className="form-group">
+              <label className="form-label">Capacidad de Espectadores *</label>
+              <input placeholder="Ej. 180" type="number" className="input" value={formSala.Capacidad} onChange={e => setFormSala({ ...formSala, Capacidad: e.target.value })} required />
             </div>
-            <button type="submit" style={btn}>Crear Sala</button>
+            <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: 12 }}>Crear Sala</button>
           </form>
         </div>
       </div>
 
-      <table style={{ width: '100%', borderCollapse: 'collapse', background: '#fff', borderRadius: 8, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-        <thead style={{ background: '#1a1a2e', color: '#fff' }}>
-          <tr><th style={th}>Sala</th><th style={th}>Sede</th><th style={th}>Capacidad</th></tr>
-        </thead>
-        <tbody>
-          {salas.map(s => (
-            <tr key={s.IdSala} style={{ borderBottom: '1px solid #eee' }}>
-              <td style={td}>{s.NombreSala}</td><td style={td}>{s.NombreSede}</td><td style={td}>{s.Capacidad}</td>
+      <div className="table-container">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Sala de Cine</th>
+              <th>Sede Ubicación</th>
+              <th>Dirección de Sede</th>
+              <th style={{ textAlign: 'right' }}>Capacidad Sala</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-      {msg && <p style={{ fontSize: 13, marginTop: 8 }}>{msg}</p>}
+          </thead>
+          <tbody>
+            {salas.length === 0 ? (
+              <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: 20 }}>No se registran salas programadas.</td></tr>
+            ) : (
+              salas.map(s => (
+                <tr key={s.IdSala}>
+                  <td style={{ fontWeight: 600 }}>{s.NombreSala}</td>
+                  <td>{s.NombreSede}</td>
+                  <td style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                    {sedes.find(se => se.NombreSede === s.NombreSede)?.Direccion || 'Dirección no especificada'}
+                  </td>
+                  <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--accent-pink)' }}>{s.Capacidad} personas</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
 
-const inp = { width: '100%', padding: '8px 10px', border: '1px solid #ccc', borderRadius: 4, fontSize: 14, boxSizing: 'border-box' }
-const btn = { padding: '10px 20px', background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 4, fontSize: 14, fontWeight: 600, cursor: 'pointer' }
-const th = { padding: '8px 12px', textAlign: 'left', fontSize: 13 }
-const td = { padding: '8px 12px', fontSize: 13 }

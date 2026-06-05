@@ -35,24 +35,45 @@ export default function Reportes() {
   ]
 
   return (
-    <div>
-      <h2 style={{ marginTop: 0 }}>Reportes</h2>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center' }}>
+    <div className="animate-fade-in">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <h2 style={{ fontSize: 28, fontWeight: 800, margin: 0 }}>Reportes y Estadísticas</h2>
+          <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginTop: 4 }}>
+            Monitoree la asistencia, premiaciones, finanzas y ocupación física de salas.
+          </p>
+        </div>
+        {tab !== 'ocupacion' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>Edición:</span>
+            <select value={idEdicion} onChange={e => setIdEdicion(e.target.value)} className="select" style={{ width: 220, padding: '8px 12px' }}>
+              <option value="">Todas las ediciones</option>
+              {ediciones.map(e => <option key={e.IdEdicion} value={e.IdEdicion}>{e.NombreEdicion}</option>)}
+            </select>
+          </div>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap' }}>
         {tabs.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
-            style={{ padding: '8px 16px', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 600, fontSize: 13, background: tab === t.key ? '#1a1a2e' : '#e0e0e0', color: tab === t.key ? '#fff' : '#333' }}>
+            className="btn"
+            style={{ 
+              background: tab === t.key ? 'linear-gradient(135deg, var(--accent-purple), var(--accent-pink))' : 'rgba(255,255,255,0.05)', 
+              color: '#fff',
+              border: tab === t.key ? 'none' : '1px solid rgba(255,255,255,0.08)'
+            }}>
             {t.label}
           </button>
         ))}
-        {tab !== 'ocupacion' && (
-          <select value={idEdicion} onChange={e => setIdEdicion(e.target.value)} style={{ marginLeft: 'auto', padding: '6px 10px', border: '1px solid #ccc', borderRadius: 4, fontSize: 13 }}>
-            <option value="">Todas las ediciones</option>
-            {ediciones.map(e => <option key={e.IdEdicion} value={e.IdEdicion}>{e.NombreEdicion}</option>)}
-          </select>
-        )}
       </div>
-      {loading ? <p>Cargando...</p> : (
-        <div style={{ background: '#fff', borderRadius: 8, padding: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-secondary)' }}>
+          Cargando reporte...
+        </div>
+      ) : (
+        <div className="glass-card" style={{ padding: 20 }}>
           {tab === 'ranking' && <RankingTable data={data} />}
           {tab === 'premiacion' && <PremiacionTable data={data} />}
           {tab === 'financiero' && <FinancieroTable data={data} />}
@@ -65,37 +86,72 @@ export default function Reportes() {
 
 function RankingTable({ data }) {
   return (
-    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-      <thead><tr style={{ borderBottom: '2px solid #1a1a2e' }}>
-        <th style={th}>Película</th><th style={th}>Asistentes</th><th style={th}>Capacidad Total</th><th style={th}>Ocupación</th>
-      </tr></thead>
-      <tbody>
-        {data.map((r, i) => (
-          <tr key={i} style={{ borderBottom: '1px solid #eee' }}>
-            <td style={td}>{r.Titulo}</td><td style={td}>{r.Asistentes}</td><td style={td}>{r.CapacidadTotal}</td>
-            <td style={td}>{r.PctOcupacion}%</td>
+    <div className="table-container">
+      <table className="table">
+        <thead>
+          <tr>
+            <th>Película</th>
+            <th>Espectadores</th>
+            <th>Capacidad Max</th>
+            <th style={{ textAlign: 'right' }}>Porcentaje Ocupación</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {data.length === 0 ? (
+            <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>Sin registros en esta edición</td></tr>
+          ) : (
+            data.map((r, i) => (
+              <tr key={i}>
+                <td style={{ fontWeight: 600 }}>{r.Titulo}</td>
+                <td>{r.Asistentes}</td>
+                <td>{r.CapacidadTotal}</td>
+                <td style={{ textAlign: 'right' }}>
+                  <span className={`badge ${r.PctOcupacion >= 80 ? 'badge-premiada' : r.PctOcupacion >= 50 ? 'badge-seleccionada' : 'badge-postulada'}`}>
+                    {r.PctOcupacion}%
+                  </span>
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
   )
 }
 
 function PremiacionTable({ data }) {
   return (
-    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-      <thead><tr style={{ borderBottom: '2px solid #1a1a2e' }}>
-        <th style={th}>Categoría</th><th style={th}>Película Ganadora</th><th style={th}>Promedio Jurado</th><th style={th}>Año</th>
-      </tr></thead>
-      <tbody>
-        {data.map((r, i) => (
-          <tr key={i} style={{ borderBottom: '1px solid #eee' }}>
-            <td style={td}>{r.NombreCategoria}</td><td style={td}>{r.PeliculaGanadora}</td>
-            <td style={td}>{r.PromedioJurado}</td><td style={td}>{r.Anio}</td>
+    <div className="table-container">
+      <table className="table">
+        <thead>
+          <tr>
+            <th>Categoría</th>
+            <th>Película Ganadora</th>
+            <th>Promedio Jurado</th>
+            <th style={{ textAlign: 'right' }}>Año Edición</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {data.length === 0 ? (
+            <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>No se registran ganadores oficiales para esta edición</td></tr>
+          ) : (
+            data.map((r, i) => (
+              <tr key={i}>
+                <td style={{ fontWeight: 600 }}>{r.NombreCategoria}</td>
+                <td>
+                  <span className="badge badge-premiada" style={{ marginRight: 8 }}>🏆 GANADORA</span>
+                  {r.PeliculaGanadora}
+                </td>
+                <td>
+                  <span style={{ color: 'var(--accent-amber)', fontWeight: 700 }}>★ {parseFloat(r.PromedioJurado).toFixed(2)}</span>
+                </td>
+                <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>{r.Anio}</td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
   )
 }
 
@@ -103,42 +159,75 @@ function FinancieroTable({ data }) {
   const total = data.reduce((s, r) => s + parseFloat(r.Subtotal || 0), 0)
   return (
     <div>
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-        <thead><tr style={{ borderBottom: '2px solid #1a1a2e' }}>
-          <th style={th}>Tarifa</th><th style={th}>Cantidad</th><th style={th}>Total</th>
-        </tr></thead>
-        <tbody>
-          {data.map((r, i) => (
-            <tr key={i} style={{ borderBottom: '1px solid #eee' }}>
-              <td style={td}>{r.NombreTarifa}</td>
-              <td style={td}>{r.Cantidad}</td><td style={td}>Bs. {parseFloat(r.Subtotal).toFixed(2)}</td>
+      <div className="table-container">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Tarifa / Tipo Venta</th>
+              <th>Cantidad Vendida</th>
+              <th style={{ textAlign: 'right' }}>Subtotal</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-      <p style={{ textAlign: 'right', fontWeight: 700, marginTop: 12 }}>TOTAL GENERAL: Bs. {total.toFixed(2)}</p>
+          </thead>
+          <tbody>
+            {data.length === 0 ? (
+              <tr><td colSpan={3} style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>Sin ingresos registrados</td></tr>
+            ) : (
+              data.map((r, i) => (
+                <tr key={i}>
+                  <td style={{ fontWeight: 600 }}>{r.NombreTarifa}</td>
+                  <td>{r.Cantidad}</td>
+                  <td style={{ textAlign: 'right', color: 'var(--accent-emerald)', fontWeight: 600 }}>
+                    Bs. {parseFloat(r.Subtotal).toFixed(2)}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16, padding: '12px 20px', background: 'rgba(16, 185, 129, 0.08)', borderRadius: 8, border: '1px solid rgba(16, 185, 129, 0.15)' }}>
+        <span style={{ fontSize: 16, fontWeight: 800, color: '#fff' }}>
+          TOTAL RECAUDADO: <span style={{ color: 'var(--accent-emerald)', marginLeft: 8 }}>Bs. {total.toFixed(2)}</span>
+        </span>
+      </div>
     </div>
   )
 }
 
 function OcupacionTable({ data }) {
   return (
-    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-      <thead><tr style={{ borderBottom: '2px solid #1a1a2e' }}>
-        <th style={th}>Sala</th><th style={th}>Sede</th><th style={th}>Capacidad</th><th style={th}>Entradas</th><th style={th}>Ocupación</th>
-      </tr></thead>
-      <tbody>
-        {data.map((r, i) => (
-          <tr key={i} style={{ borderBottom: '1px solid #eee' }}>
-            <td style={td}>{r.NombreSala}</td><td style={td}>{r.NombreSede}</td>
-            <td style={td}>{r.Capacidad}</td><td style={td}>{r.EntradasVendidas}</td>
-            <td style={td}>{r.PorcentajeOcupacion}%</td>
+    <div className="table-container">
+      <table className="table">
+        <thead>
+          <tr>
+            <th>Sala</th>
+            <th>Sede</th>
+            <th>Capacidad Máxima</th>
+            <th>Boletos Emitidos</th>
+            <th style={{ textAlign: 'right' }}>Porcentaje Ocupación</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {data.length === 0 ? (
+            <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>No hay datos de ocupación de salas</td></tr>
+          ) : (
+            data.map((r, i) => (
+              <tr key={i}>
+                <td style={{ fontWeight: 600 }}>{r.NombreSala}</td>
+                <td>{r.NombreSede}</td>
+                <td>{r.Capacidad}</td>
+                <td>{r.EntradasVendidas}</td>
+                <td style={{ textAlign: 'right' }}>
+                  <span className={`badge ${r.PorcentajeOcupacion >= 80 ? 'badge-premiada' : r.PorcentajeOcupacion >= 50 ? 'badge-seleccionada' : 'badge-postulada'}`}>
+                    {r.PorcentajeOcupacion}%
+                  </span>
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
   )
 }
 
-const th = { padding: '8px 12px', textAlign: 'left', fontSize: 13 }
-const td = { padding: '8px 12px', fontSize: 13 }

@@ -65,8 +65,8 @@ def proyecciones(request, id=None):
     if request.method == "POST":
         data = _body(request)
         try:
-            rows = query('SELECT * FROM fn_call_programarproyeccion(%s,%s,%s,%s,%s)',
-                (data["IdPelicula"], data["IdSala"], data["IdEdicion"], data["FechaHora"], data.get("TieneQA", False)))
+            rows = query('SELECT * FROM fn_call_programarproyeccion(%s,%s,%s,%s)',
+                (data["IdPelicula"], data["IdSala"], data["FechaHora"], data.get("TieneQA", False)))
             msg = rows[0]["Respuesta"] if rows else ""
             if msg.startswith("Error"):
                 return _error(msg, 409)
@@ -106,8 +106,15 @@ def entradas(request):
     if request.method == "POST":
         data = _body(request)
         try:
-            rows = query('SELECT * FROM fn_call_comprarentrada(%s,%s,%s)',
-                (int(data["IdAsistente"]), int(data["IdProyeccion"]), int(data["IdTarifa"])))
+            if data.get("IdProyeccion"):
+                rows = query('SELECT * FROM fn_call_comprarentrada(%s,%s,%s)',
+                    (int(data["IdAsistente"]), int(data["IdProyeccion"]), int(data["IdTarifa"])))
+            elif data.get("IdEvento"):
+                rows = query('SELECT * FROM fn_call_comprarentradaevento(%s,%s,%s)',
+                    (int(data["IdAsistente"]), int(data["IdEvento"]), int(data["IdTarifa"])))
+            else:
+                return _error("Debe especificar una proyeccion o un evento")
+            
             msg = rows[0]["Respuesta"] if rows else ""
             if msg.startswith("Error"):
                 return _error(msg)
@@ -115,19 +122,26 @@ def entradas(request):
         except Exception as e:
             return _error(str(e).split("\n")[0])
 
+
 # --- ABONOS ---
 @csrf_exempt
 @require_http_methods(["GET", "POST"])
 def abonos(request):
     if request.method == "GET":
-        rows = query('SELECT * FROM vw_Abonos')
+        rows = query(
+            '''SELECT ab.*, a.nombre AS NombreAsistente, ta.nombreabono AS NombreAbono, ta.precio AS Precio
+               FROM abonos ab
+               JOIN asistentes a ON a.idasistente = ab.idasistente
+               JOIN tiposabono ta ON ta.idtipoabono = ab.idtipoabono
+               ORDER BY ab.fechacompra DESC'''
+        )
         return _json([dict(r) for r in rows])
 
     if request.method == "POST":
         data = _body(request)
         try:
-            rows = query('SELECT * FROM fn_call_venderabono(%s,%s,%s,%s)',
-                (data["IdAsistente"], data["IdTipoAbono"], data["IdEdicion"], data.get("PagoExitoso", True)))
+            rows = query('SELECT * FROM fn_call_venderabono(%s,%s,%s)',
+                (data["IdAsistente"], data["IdTipoAbono"], data.get("PagoExitoso", True)))
             msg = rows[0]["Respuesta"] if rows else ""
             if msg.startswith("Error"):
                 return _error(msg)
@@ -174,23 +188,66 @@ def salas(request, id=None):
 
 # --- EVENTOS ---
 @csrf_exempt
-@require_http_methods(["GET", "POST"])
+@require_http_methods(["GET", "POST", "PUT", "DELETE"])
 def eventos(request, id=None):
     if request.method == "GET":
         if id:
-            r = query_one('SELECT * FROM vw_Eventos WHERE IdEvento=%s', (id,))
+            r = query_one(
+                '''SELECT ep.idevento AS IdEvento, ep.nombreevento AS NombreEvento,
+                          ep.tipoevento AS TipoEvento, ep.fechahora AS FechaHora,
+                          ep.aforo AS Aforo, ep.costoinscripcion AS CostoInscripcion,
+                          STRING_AGG(per.nombre, ', ' ORDER BY per.nombre) AS Expositores
+                   FROM eventosparalelos ep
+                   LEFT JOIN expositorevento ee ON ee.idevento = ep.idevento
+                   LEFT JOIN personal per ON per.idpersonal = ee.idpersonal
+                   WHERE ep.idevento=%s
+                   GROUP BY ep.idevento, ep.nombreevento, ep.tipoevento,
+                            ep.fechahora, ep.aforo, ep.costoinscripcion''',
+                (id,)
+            )
             return _json(r) if r else _not_found()
-        return _json([dict(r) for r in query('SELECT * FROM vw_Eventos ORDER BY FechaHora')])
+        rows = query(
+            '''SELECT ep.idevento AS IdEvento, ep.nombreevento AS NombreEvento,
+                      ep.tipoevento AS TipoEvento, ep.fechahora AS FechaHora,
+                      ep.aforo AS Aforo, ep.costoinscripcion AS CostoInscripcion,
+                      STRING_AGG(per.nombre, ', ' ORDER BY per.nombre) AS Expositores
+               FROM eventosparalelos ep
+               LEFT JOIN expositorevento ee ON ee.idevento = ep.idevento
+               LEFT JOIN personal per ON per.idpersonal = ee.idpersonal
+               GROUP BY ep.idevento, ep.nombreevento, ep.tipoevento,
+                        ep.fechahora, ep.aforo, ep.costoinscripcion
+               ORDER BY ep.fechahora'''
+        )
+        return _json([dict(r) for r in rows])
 
     if request.method == "POST":
         data = _body(request)
-        r = query_one('INSERT INTO EventosParalelos (IdEdicion, NombreEvento, TipoEvento, FechaHora, Aforo, CostoInscripcion) VALUES (%s,%s,%s,%s,%s,%s) RETURNING IdEvento',
-            (data["IdEdicion"], data["NombreEvento"], data["TipoEvento"], data["FechaHora"],
-             data["Aforo"], data.get("CostoInscripcion", 0)))
+        r = query_one(
+            'INSERT INTO EventosParalelos (NombreEvento, TipoEvento, FechaHora, Aforo, CostoInscripcion) VALUES (%s,%s,%s,%s,%s) RETURNING IdEvento',
+            (data["NombreEvento"], data["TipoEvento"], data["FechaHora"], data["Aforo"], data.get("CostoInscripcion", 0))
+        )
         eid = r["IdEvento"]
         for p in data.get("expositores", []):
             query('INSERT INTO ExpositorEvento (IdEvento, IdPersonal) VALUES (%s,%s)', (eid, p))
         return _json({"id": eid}, 201)
+
+    if request.method == "PUT":
+        data = _body(request)
+        query(
+            'UPDATE EventosParalelos SET NombreEvento=%s, TipoEvento=%s, FechaHora=%s, Aforo=%s, CostoInscripcion=%s WHERE IdEvento=%s',
+            (data["NombreEvento"], data["TipoEvento"], data["FechaHora"], data["Aforo"], data.get("CostoInscripcion", 0), id)
+        )
+        if "expositores" in data:
+            query('DELETE FROM ExpositorEvento WHERE IdEvento=%s', (id,))
+            for p in data["expositores"]:
+                query('INSERT INTO ExpositorEvento (IdEvento, IdPersonal) VALUES (%s,%s)', (id, p))
+        return _json({"message": "Actualizado"})
+
+    if request.method == "DELETE":
+        query('DELETE FROM Entradas WHERE IdEvento=%s', (id,))
+        query('DELETE FROM ExpositorEvento WHERE IdEvento=%s', (id,))
+        query('DELETE FROM EventosParalelos WHERE IdEvento=%s', (id,))
+        return _json({"message": "Eliminado"})
 
 # --- GENEROS ---
 @csrf_exempt
@@ -200,7 +257,7 @@ def generos(request):
 
 # --- PERSONAL ---
 @csrf_exempt
-@require_http_methods(["GET", "POST"])
+@require_http_methods(["GET", "POST", "PUT", "DELETE"])
 def personal(request, id=None):
     if request.method == "GET":
         if id:
@@ -214,9 +271,24 @@ def personal(request, id=None):
             (data["Nombre"], data.get("Biografia"), data.get("Email"), data.get("Telefono"), data.get("Nacionalidad")))
         return _json({"id": r["IdPersonal"]}, 201)
 
+    if request.method == "PUT":
+        data = _body(request)
+        query('UPDATE Personal SET Nombre=%s, Biografia=%s, Email=%s, Telefono=%s, Nacionalidad=%s WHERE IdPersonal=%s',
+            (data["Nombre"], data.get("Biografia"), data.get("Email"), data.get("Telefono"), data.get("Nacionalidad"), id))
+        return _json({"message": "Actualizado"})
+
+    if request.method == "DELETE":
+        query('DELETE FROM RolesPelicula WHERE IdPersonal=%s', (id,))
+        query('DELETE FROM ExpositorEvento WHERE IdPersonal=%s', (id,))
+        query('DELETE FROM Alojamientos WHERE IdPersonal=%s', (id,))
+        query('DELETE FROM Traslados WHERE IdPersonal=%s', (id,))
+        query('DELETE FROM Personal WHERE IdPersonal=%s', (id,))
+        return _json({"message": "Eliminado"})
+
+
 # --- CATEGORIAS ---
 @csrf_exempt
-@require_http_methods(["GET", "POST"])
+@require_http_methods(["GET", "POST", "PUT", "DELETE"])
 def categorias(request, id=None):
     if request.method == "GET":
         if id:
@@ -230,9 +302,24 @@ def categorias(request, id=None):
             (data["NombreCategoria"], data.get("Descripcion")))
         return _json({"id": r["IdCategoria"]}, 201)
 
+    if request.method == "PUT":
+        data = _body(request)
+        query('UPDATE Categorias SET NombreCategoria=%s, Descripcion=%s WHERE IdCategoria=%s',
+            (data["NombreCategoria"], data.get("Descripcion"), id))
+        return _json({"message": "Actualizado"})
+
+    if request.method == "DELETE":
+        query('DELETE FROM CompetenciaPelicula WHERE IdCategoria=%s', (id,))
+        query('DELETE FROM JuradoCategoria WHERE IdCategoria=%s', (id,))
+        query('DELETE FROM Evaluaciones WHERE IdCategoria=%s', (id,))
+        query('DELETE FROM Premios WHERE IdCategoria=%s', (id,))
+        query('DELETE FROM Categorias WHERE IdCategoria=%s', (id,))
+        return _json({"message": "Eliminado"})
+
+
 # --- JURADOS ---
 @csrf_exempt
-@require_http_methods(["GET", "POST"])
+@require_http_methods(["GET", "POST", "PUT", "DELETE"])
 def jurados(request, id=None):
     if request.method == "GET":
         if id:
@@ -246,26 +333,69 @@ def jurados(request, id=None):
             (data["Nombre"], data.get("Profesion"), data.get("Pais"), data.get("Email")))
         return _json({"id": r["IdMiembro"]}, 201)
 
+    if request.method == "PUT":
+        data = _body(request)
+        query('UPDATE MiembrosJurado SET Nombre=%s, Profesion=%s, Pais=%s, Email=%s WHERE IdMiembro=%s',
+            (data["Nombre"], data.get("Profesion"), data.get("Pais"), data.get("Email"), id))
+        return _json({"message": "Actualizado"})
+
+    if request.method == "DELETE":
+        query('DELETE FROM JuradoCategoria WHERE IdMiembro=%s', (id,))
+        query('DELETE FROM Evaluaciones WHERE IdMiembro=%s', (id,))
+        query('DELETE FROM MiembrosJurado WHERE IdMiembro=%s', (id,))
+        return _json({"message": "Eliminado"})
+
+
 # --- EVALUACIONES ---
 @csrf_exempt
-@require_http_methods(["GET", "POST"])
+@require_http_methods(["GET", "POST", "PUT", "DELETE"])
 def evaluaciones(request, id=None):
     if request.method == "GET":
         if id:
-            r = query_one('SELECT ev.*, m.Nombre AS Jurado, p.Titulo AS Pelicula, c.NombreCategoria AS Categoria, ed.Anio, ed.NombreEdicion FROM Evaluaciones ev JOIN MiembrosJurado m ON m.IdMiembro = ev.IdMiembro JOIN Peliculas p ON p.IdPelicula = ev.IdPelicula JOIN Categorias c ON c.IdCategoria = ev.IdCategoria JOIN Ediciones ed ON ed.IdEdicion = ev.IdEdicion WHERE ev.IdEvaluacion=%s', (id,))
+            r = query_one(
+                '''SELECT ev.*, m.nombre AS Jurado, p.titulo AS Pelicula, c.nombrecategoria AS Categoria
+                   FROM Evaluaciones ev
+                   JOIN MiembrosJurado m ON m.idmiembro = ev.idmiembro
+                   JOIN Peliculas p ON p.idpelicula = ev.idpelicula
+                   JOIN Categorias c ON c.idcategoria = ev.idcategoria
+                   WHERE ev.idevaluacion=%s''',
+                (id,)
+            )
             return _json(r) if r else _not_found()
-        rows = query('SELECT ev.*, m.Nombre AS Jurado, p.Titulo AS Pelicula, c.NombreCategoria AS Categoria, ed.Anio, ed.NombreEdicion FROM Evaluaciones ev JOIN MiembrosJurado m ON m.IdMiembro = ev.IdMiembro JOIN Peliculas p ON p.IdPelicula = ev.IdPelicula JOIN Categorias c ON c.IdCategoria = ev.IdCategoria JOIN Ediciones ed ON ed.IdEdicion = ev.IdEdicion ORDER BY ev.IdEvaluacion')
+        rows = query(
+            '''SELECT ev.*, m.nombre AS Jurado, p.titulo AS Pelicula, c.nombrecategoria AS Categoria
+               FROM Evaluaciones ev
+               JOIN MiembrosJurado m ON m.idmiembro = ev.idmiembro
+               JOIN Peliculas p ON p.idpelicula = ev.idpelicula
+               JOIN Categorias c ON c.idcategoria = ev.idcategoria
+               ORDER BY ev.idevaluacion'''
+        )
         return _json([dict(r) for r in rows])
 
     if request.method == "POST":
         data = _body(request)
-        r = query_one('INSERT INTO Evaluaciones (IdMiembro, IdPelicula, IdCategoria, IdEdicion, Puntuacion, Comentario) VALUES (%s,%s,%s,%s,%s,%s) RETURNING IdEvaluacion',
-            (data["IdMiembro"], data["IdPelicula"], data["IdCategoria"], data["IdEdicion"], data["Puntuacion"], data.get("Comentario")))
+        r = query_one(
+            'INSERT INTO Evaluaciones (IdMiembro, IdPelicula, IdCategoria, Puntuacion, Comentario) VALUES (%s,%s,%s,%s,%s) RETURNING IdEvaluacion',
+            (data["IdMiembro"], data["IdPelicula"], data["IdCategoria"], data["Puntuacion"], data.get("Comentario"))
+        )
         return _json({"id": r["IdEvaluacion"]}, 201)
+
+    if request.method == "PUT":
+        data = _body(request)
+        query(
+            'UPDATE Evaluaciones SET IdMiembro=%s, IdPelicula=%s, IdCategoria=%s, Puntuacion=%s, Comentario=%s WHERE IdEvaluacion=%s',
+            (data["IdMiembro"], data["IdPelicula"], data["IdCategoria"], data["Puntuacion"], data.get("Comentario"), id)
+        )
+        return _json({"message": "Actualizado"})
+
+    if request.method == "DELETE":
+        query('DELETE FROM Evaluaciones WHERE IdEvaluacion=%s', (id,))
+        return _json({"message": "Eliminado"})
+
 
 # --- PATROCINADORES ---
 @csrf_exempt
-@require_http_methods(["GET", "POST"])
+@require_http_methods(["GET", "POST", "PUT", "DELETE"])
 def patrocinadores(request, id=None):
     if request.method == "GET":
         if id:
@@ -279,10 +409,26 @@ def patrocinadores(request, id=None):
             (data["NombreEmpresa"], data.get("Contacto"), data.get("Email"), data.get("RedesSociales")))
         return _json({"id": r["IdPatrocinador"]}, 201)
 
+    if request.method == "PUT":
+        data = _body(request)
+        query('UPDATE Patrocinadores SET NombreEmpresa=%s, Contacto=%s, Email=%s, RedesSociales=%s WHERE IdPatrocinador=%s',
+            (data["NombreEmpresa"], data.get("Contacto"), data.get("Email"), data.get("RedesSociales"), id))
+        return _json({"message": "Actualizado"})
+
+    if request.method == "DELETE":
+        query('DELETE FROM PatrocinioEdicion WHERE IdPatrocinador=%s', (id,))
+        query('DELETE FROM Patrocinadores WHERE IdPatrocinador=%s', (id,))
+        return _json({"message": "Eliminado"})
+
+
+# --- PATROCINIOS ---
 @csrf_exempt
-@require_http_methods(["GET", "POST"])
-def patrocinios(request):
+@require_http_methods(["GET", "POST", "PUT", "DELETE"])
+def patrocinios(request, id=None):
     if request.method == "GET":
+        if id:
+            r = query_one('SELECT pe.*, p.NombreEmpresa, e.NombreEdicion, e.Anio FROM PatrocinioEdicion pe JOIN Patrocinadores p ON p.IdPatrocinador = pe.IdPatrocinador JOIN Ediciones e ON e.IdEdicion = pe.IdEdicion WHERE pe.IdPatrocinio=%s', (id,))
+            return _json(r) if r else _not_found()
         rows = query('SELECT pe.*, p.NombreEmpresa, e.NombreEdicion, e.Anio FROM PatrocinioEdicion pe JOIN Patrocinadores p ON p.IdPatrocinador = pe.IdPatrocinador JOIN Ediciones e ON e.IdEdicion = pe.IdEdicion ORDER BY e.Anio DESC')
         return _json([dict(r) for r in rows])
 
@@ -292,9 +438,20 @@ def patrocinios(request):
             (data["IdPatrocinador"], data["IdEdicion"], data["TipoAporte"], data.get("Monto"), data.get("DescripcionAporte")))
         return _json({"id": r["IdPatrocinio"]}, 201)
 
+    if request.method == "PUT":
+        data = _body(request)
+        query('UPDATE PatrocinioEdicion SET IdPatrocinador=%s, IdEdicion=%s, TipoAporte=%s, Monto=%s, DescripcionAporte=%s WHERE IdPatrocinio=%s',
+            (data["IdPatrocinador"], data["IdEdicion"], data["TipoAporte"], data.get("Monto"), data.get("DescripcionAporte"), id))
+        return _json({"message": "Actualizado"})
+
+    if request.method == "DELETE":
+        query('DELETE FROM PatrocinioEdicion WHERE IdPatrocinio=%s', (id,))
+        return _json({"message": "Eliminado"})
+
+
 # --- EDICIONES ---
 @csrf_exempt
-@require_http_methods(["GET", "POST"])
+@require_http_methods(["GET", "POST", "PUT", "DELETE"])
 def ediciones(request, id=None):
     if request.method == "GET":
         if id:
@@ -308,9 +465,21 @@ def ediciones(request, id=None):
             (data["Anio"], data["NombreEdicion"], data["FechaInicio"], data["FechaFin"]))
         return _json({"id": r["IdEdicion"]}, 201)
 
+    if request.method == "PUT":
+        data = _body(request)
+        query('UPDATE Ediciones SET Anio=%s, NombreEdicion=%s, FechaInicio=%s, FechaFin=%s WHERE IdEdicion=%s',
+            (data["Anio"], data["NombreEdicion"], data["FechaInicio"], data["FechaFin"], id))
+        return _json({"message": "Actualizada"})
+
+    if request.method == "DELETE":
+        query('DELETE FROM PatrocinioEdicion WHERE IdEdicion=%s', (id,))
+        query('DELETE FROM Ediciones WHERE IdEdicion=%s', (id,))
+        return _json({"message": "Eliminada"})
+
+
 # --- HOTELES ---
 @csrf_exempt
-@require_http_methods(["GET", "POST"])
+@require_http_methods(["GET", "POST", "PUT", "DELETE"])
 def hoteles(request, id=None):
     if request.method == "GET":
         if id:
@@ -324,98 +493,207 @@ def hoteles(request, id=None):
             (data["NombreHotel"], data.get("Direccion"), data.get("Estrellas")))
         return _json({"id": r["IdHotel"]}, 201)
 
+    if request.method == "PUT":
+        data = _body(request)
+        query('UPDATE Hoteles SET NombreHotel=%s, Direccion=%s, Estrellas=%s WHERE IdHotel=%s',
+            (data["NombreHotel"], data.get("Direccion"), data.get("Estrellas"), id))
+        return _json({"message": "Actualizado"})
+
+    if request.method == "DELETE":
+        query('DELETE FROM Alojamientos WHERE IdHotel=%s', (id,))
+        query('DELETE FROM Hoteles WHERE IdHotel=%s', (id,))
+        return _json({"message": "Eliminado"})
+
+
 # --- ALOJAMIENTOS ---
 @csrf_exempt
-@require_http_methods(["GET", "POST"])
+@require_http_methods(["GET", "POST", "PUT", "DELETE"])
 def alojamientos(request, id=None):
     if request.method == "GET":
         if id:
-            r = query_one('SELECT a.*, p.Nombre AS Personal, h.NombreHotel FROM Alojamientos a JOIN Personal p ON p.IdPersonal = a.IdPersonal JOIN Hoteles h ON h.IdHotel = a.IdHotel WHERE a.IdAlojamiento=%s', (id,))
+            r = query_one(
+                '''SELECT a.*, p.nombre AS Personal, h.nombrehotel AS NombreHotel
+                   FROM alojamientos a
+                   JOIN personal p ON p.idpersonal = a.idpersonal
+                   JOIN hoteles h ON h.idhotel = a.idhotel
+                   WHERE a.idalojamiento=%s''',
+                (id,)
+            )
             return _json(r) if r else _not_found()
-        rows = query('SELECT a.*, p.Nombre AS Personal, h.NombreHotel FROM Alojamientos a JOIN Personal p ON p.IdPersonal = a.IdPersonal JOIN Hoteles h ON h.IdHotel = a.IdHotel ORDER BY a.CheckIn')
+        rows = query(
+            '''SELECT a.*, p.nombre AS Personal, h.nombrehotel AS NombreHotel
+               FROM alojamientos a
+               JOIN personal p ON p.idpersonal = a.idpersonal
+               JOIN hoteles h ON h.idhotel = a.idhotel
+               ORDER BY a.checkin'''
+        )
         return _json([dict(r) for r in rows])
 
     if request.method == "POST":
         data = _body(request)
-        r = query_one('INSERT INTO Alojamientos (IdPersonal, IdHotel, IdEdicion, NroHabitacion, CheckIn, CheckOut) VALUES (%s,%s,%s,%s,%s,%s) RETURNING IdAlojamiento',
-            (data["IdPersonal"], data["IdHotel"], data["IdEdicion"], data["NroHabitacion"], data["CheckIn"], data["CheckOut"]))
+        r = query_one(
+            'INSERT INTO Alojamientos (IdPersonal, IdHotel, NroHabitacion, CheckIn, CheckOut) VALUES (%s,%s,%s,%s,%s) RETURNING IdAlojamiento',
+            (data["IdPersonal"], data["IdHotel"], data["NroHabitacion"], data["CheckIn"], data["CheckOut"])
+        )
         return _json({"id": r["IdAlojamiento"]}, 201)
+
+    if request.method == "PUT":
+        data = _body(request)
+        query(
+            'UPDATE Alojamientos SET IdPersonal=%s, IdHotel=%s, NroHabitacion=%s, CheckIn=%s, CheckOut=%s WHERE IdAlojamiento=%s',
+            (data["IdPersonal"], data["IdHotel"], data["NroHabitacion"], data["CheckIn"], data["CheckOut"], id)
+        )
+        return _json({"message": "Actualizado"})
+
+    if request.method == "DELETE":
+        query('DELETE FROM Alojamientos WHERE IdAlojamiento=%s', (id,))
+        return _json({"message": "Eliminado"})
+
 
 # --- TRASLADOS ---
 @csrf_exempt
-@require_http_methods(["GET", "POST"])
+@require_http_methods(["GET", "POST", "PUT", "DELETE"])
 def traslados(request, id=None):
     if request.method == "GET":
         if id:
-            r = query_one('SELECT t.*, p.Nombre AS Personal FROM Traslados t JOIN Personal p ON p.IdPersonal = t.IdPersonal WHERE t.IdTraslado=%s', (id,))
+            r = query_one(
+                '''SELECT t.*, p.nombre AS Personal
+                   FROM traslados t
+                   JOIN personal p ON p.idpersonal = t.idpersonal
+                   WHERE t.idtraslado=%s''',
+                (id,)
+            )
             return _json(r) if r else _not_found()
-        rows = query('SELECT t.*, p.Nombre AS Personal FROM Traslados t JOIN Personal p ON p.IdPersonal = t.IdPersonal ORDER BY t.FechaHora')
+        rows = query(
+            '''SELECT t.*, p.nombre AS Personal
+               FROM traslados t
+               JOIN personal p ON p.idpersonal = t.idpersonal
+               ORDER BY t.fechahora'''
+        )
         return _json([dict(r) for r in rows])
 
     if request.method == "POST":
         data = _body(request)
-        r = query_one('INSERT INTO Traslados (IdPersonal, IdEdicion, TipoTraslado, Origen, Destino, FechaHora, NroVuelo) VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING IdTraslado',
-            (data["IdPersonal"], data["IdEdicion"], data["TipoTraslado"], data["Origen"], data["Destino"], data["FechaHora"], data.get("NroVuelo")))
+        r = query_one(
+            'INSERT INTO Traslados (IdPersonal, TipoTraslado, Origen, Destino, FechaHora, NroVuelo) VALUES (%s,%s,%s,%s,%s,%s) RETURNING IdTraslado',
+            (data["IdPersonal"], data["TipoTraslado"], data["Origen"], data["Destino"], data["FechaHora"], data.get("NroVuelo"))
+        )
         return _json({"id": r["IdTraslado"]}, 201)
+
+    if request.method == "PUT":
+        data = _body(request)
+        query(
+            'UPDATE Traslados SET IdPersonal=%s, TipoTraslado=%s, Origen=%s, Destino=%s, FechaHora=%s, NroVuelo=%s WHERE IdTraslado=%s',
+            (data["IdPersonal"], data["TipoTraslado"], data["Origen"], data["Destino"], data["FechaHora"], data.get("NroVuelo"), id)
+        )
+        return _json({"message": "Actualizado"})
+
+    if request.method == "DELETE":
+        query('DELETE FROM Traslados WHERE IdTraslado=%s', (id,))
+        return _json({"message": "Eliminado"})
 
 # --- PREMIOS ---
 @csrf_exempt
-@require_http_methods(["GET", "POST"])
+@require_http_methods(["GET", "POST", "PUT", "DELETE"])
 def premios(request, id=None):
     if request.method == "GET":
         if id:
-            r = query_one('SELECT pre.*, c.NombreCategoria, p.Titulo AS Pelicula, e.Anio, e.NombreEdicion FROM Premios pre JOIN Categorias c ON c.IdCategoria = pre.IdCategoria JOIN Peliculas p ON p.IdPelicula = pre.IdPelicula JOIN Ediciones e ON e.IdEdicion = pre.IdEdicion WHERE pre.IdPremio=%s', (id,))
+            r = query_one(
+                '''SELECT pre.*, c.nombrecategoria AS NombreCategoria, p.titulo AS Pelicula
+                   FROM Premios pre
+                   JOIN Categorias c ON c.idcategoria = pre.idcategoria
+                   JOIN Peliculas p ON p.idpelicula = pre.idpelicula
+                   WHERE pre.idpremio=%s''',
+                (id,)
+            )
             return _json(r) if r else _not_found()
-        rows = query('SELECT pre.*, c.NombreCategoria, p.Titulo AS Pelicula, e.Anio, e.NombreEdicion FROM Premios pre JOIN Categorias c ON c.IdCategoria = pre.IdCategoria JOIN Peliculas p ON p.IdPelicula = pre.IdPelicula JOIN Ediciones e ON e.IdEdicion = pre.IdEdicion ORDER BY e.Anio DESC, c.NombreCategoria')
+        rows = query(
+            '''SELECT pre.*, c.nombrecategoria AS NombreCategoria, p.titulo AS Pelicula
+               FROM Premios pre
+               JOIN Categorias c ON c.idcategoria = pre.idcategoria
+               JOIN Peliculas p ON p.idpelicula = pre.idpelicula
+               ORDER BY pre.anioedicion DESC, c.nombrecategoria'''
+        )
         return _json([dict(r) for r in rows])
 
     if request.method == "POST":
         data = _body(request)
-        r = query_one('INSERT INTO Premios (IdCategoria, IdPelicula, IdEdicion) VALUES (%s,%s,%s) RETURNING IdPremio',
-            (data["IdCategoria"], data["IdPelicula"], data["IdEdicion"]))
+        r = query_one(
+            'INSERT INTO Premios (IdCategoria, IdPelicula, AnioEdicion) VALUES (%s,%s,%s) RETURNING IdPremio',
+            (data["IdCategoria"], data["IdPelicula"], data.get("AnioEdicion", 2026))
+        )
         return _json({"id": r["IdPremio"]}, 201)
+
+    if request.method == "PUT":
+        data = _body(request)
+        query(
+            'UPDATE Premios SET IdCategoria=%s, IdPelicula=%s, AnioEdicion=%s WHERE IdPremio=%s',
+            (data["IdCategoria"], data["IdPelicula"], data.get("AnioEdicion", 2026), id)
+        )
+        return _json({"message": "Actualizado"})
+
+    if request.method == "DELETE":
+        query('DELETE FROM Premios WHERE IdPremio=%s', (id,))
+        return _json({"message": "Eliminado"})
+
 
 # --- TARIFAS ---
 @csrf_exempt
 @require_http_methods(["GET"])
 def tarifas(request):
-    return _json([dict(r) for r in query('SELECT * FROM vw_Tarifas')])
+    # Tarifas solo tiene: IdTarifa, NombreTarifa, Precio
+    return _json([dict(r) for r in query('SELECT idtarifa AS IdTarifa, nombretarifa AS NombreTarifa, precio AS Precio FROM tarifas ORDER BY precio')])
 
 # --- TIPOS ABONO ---
 @csrf_exempt
 @require_http_methods(["GET"])
 def tiposabono(request):
-    return _json([dict(r) for r in query('SELECT * FROM vw_TiposAbono')])
+    # TiposAbono tiene: IdTipoAbono, NombreAbono, Descripcion, Precio
+    return _json([dict(r) for r in query('SELECT idtipoabono AS IdTipoAbono, nombreabono AS NombreAbono, descripcion AS Descripcion, precio AS Precio FROM tiposabono ORDER BY precio')])
 
 # --- COMPETENCIA PELICULA ---
 @csrf_exempt
-@require_http_methods(["GET", "POST"])
+@require_http_methods(["GET", "POST", "DELETE"])
 def competencia(request):
     if request.method == "GET":
         pelicula_id = request.GET.get("pelicula")
         categoria_id = request.GET.get("categoria")
-        edicion_id = request.GET.get("edicion")
-        if pelicula_id and categoria_id and edicion_id:
-            r = query_one('SELECT cp.*, p.Titulo, c.NombreCategoria, e.Anio, e.NombreEdicion FROM CompetenciaPelicula cp JOIN Peliculas p ON p.IdPelicula = cp.IdPelicula JOIN Categorias c ON c.IdCategoria = cp.IdCategoria JOIN Ediciones e ON e.IdEdicion = cp.IdEdicion WHERE cp.IdPelicula=%s AND cp.IdCategoria=%s AND cp.IdEdicion=%s', (pelicula_id, categoria_id, edicion_id))
+        if pelicula_id and categoria_id:
+            r = query_one('SELECT cp.*, p.titulo AS Titulo, c.nombrecategoria AS NombreCategoria FROM competenciapelicula cp JOIN peliculas p ON p.idpelicula = cp.idpelicula JOIN categorias c ON c.idcategoria = cp.idcategoria WHERE cp.idpelicula=%s AND cp.idcategoria=%s', (pelicula_id, categoria_id))
             return _json(r) if r else _not_found()
-        rows = query('SELECT cp.*, p.Titulo, c.NombreCategoria, e.Anio, e.NombreEdicion FROM CompetenciaPelicula cp JOIN Peliculas p ON p.IdPelicula = cp.IdPelicula JOIN Categorias c ON c.IdCategoria = cp.IdCategoria JOIN Ediciones e ON e.IdEdicion = cp.IdEdicion ORDER BY p.Titulo, c.NombreCategoria')
+        rows = query('SELECT cp.*, p.titulo AS Titulo, c.nombrecategoria AS NombreCategoria FROM competenciapelicula cp JOIN peliculas p ON p.idpelicula = cp.idpelicula JOIN categorias c ON c.idcategoria = cp.idcategoria ORDER BY p.titulo, c.nombrecategoria')
         return _json([dict(r) for r in rows])
 
     if request.method == "POST":
         data = _body(request)
-        r = query_one('INSERT INTO CompetenciaPelicula (IdPelicula, IdCategoria, IdEdicion) VALUES (%s,%s,%s) RETURNING IdPelicula',
-            (data["IdPelicula"], data["IdCategoria"], data["IdEdicion"]))
+        r = query_one('INSERT INTO CompetenciaPelicula (IdPelicula, IdCategoria) VALUES (%s,%s) RETURNING IdPelicula',
+            (data["IdPelicula"], data["IdCategoria"]))
         return _json({"id": r["IdPelicula"]}, 201)
+
+    if request.method == "DELETE":
+        pelicula_id = request.GET.get("pelicula")
+        categoria_id = request.GET.get("categoria")
+        query('DELETE FROM CompetenciaPelicula WHERE IdPelicula=%s AND IdCategoria=%s', (pelicula_id, categoria_id))
+        return _json({"message": "Eliminada de competencia"})
+
 
 # --- REPORTES ---
 @csrf_exempt
 @require_http_methods(["GET"])
 def reporte_ranking(request):
-    id_edicion = request.GET.get("id_edicion")
-    if id_edicion:
-        rows = query('SELECT p.Titulo, COUNT(e.IdEntrada) AS Asistentes, SUM(s.Capacidad) AS CapacidadTotal, ROUND(COUNT(e.IdEntrada) * 100.0 / NULLIF(SUM(s.Capacidad), 0), 2) AS PctOcupacion FROM Peliculas p INNER JOIN Proyecciones pr ON pr.IdPelicula = p.IdPelicula INNER JOIN Salas s ON s.IdSala = pr.IdSala LEFT JOIN Entradas e ON e.IdProyeccion = pr.IdProyeccion WHERE pr.IdEdicion = %s GROUP BY p.Titulo ORDER BY Asistentes DESC', (id_edicion,))
-    else:
-        rows = query('SELECT p.Titulo, COUNT(e.IdEntrada) AS Asistentes, SUM(s.Capacidad) AS CapacidadTotal, ROUND(COUNT(e.IdEntrada) * 100.0 / NULLIF(SUM(s.Capacidad), 0), 2) AS PctOcupacion FROM Peliculas p INNER JOIN Proyecciones pr ON pr.IdPelicula = p.IdPelicula INNER JOIN Salas s ON s.IdSala = pr.IdSala LEFT JOIN Entradas e ON e.IdProyeccion = pr.IdProyeccion GROUP BY p.Titulo ORDER BY Asistentes DESC')
+    # Ranking de películas por asistentes (sin filtro por edición — Proyecciones no tiene IdEdicion)
+    rows = query(
+        '''SELECT p.titulo AS Titulo,
+                  COUNT(e.identrada) AS Asistentes,
+                  SUM(s.capacidad) AS CapacidadTotal,
+                  ROUND(COUNT(e.identrada) * 100.0 / NULLIF(SUM(s.capacidad), 0), 2) AS PctOcupacion
+           FROM peliculas p
+           INNER JOIN proyecciones pr ON pr.idpelicula = p.idpelicula
+           INNER JOIN salas s ON s.idsala = pr.idsala
+           LEFT JOIN entradas e ON e.idproyeccion = pr.idproyeccion
+           GROUP BY p.titulo
+           ORDER BY Asistentes DESC'''
+    )
     return _json([dict(r) for r in rows])
 
 @csrf_exempt
@@ -423,30 +701,109 @@ def reporte_ranking(request):
 def reporte_premiacion(request):
     id_edicion = request.GET.get("id_edicion")
     if id_edicion:
-        rows = query('SELECT c.NombreCategoria, p.Titulo AS PeliculaGanadora, ROUND(AVG(ev.Puntuacion), 2) AS PromedioJurado, e.Anio FROM Premios pre INNER JOIN Categorias c ON c.IdCategoria = pre.IdCategoria INNER JOIN Peliculas p ON p.IdPelicula = pre.IdPelicula INNER JOIN Ediciones e ON e.IdEdicion = pre.IdEdicion INNER JOIN Evaluaciones ev ON ev.IdPelicula = pre.IdPelicula AND ev.IdCategoria = pre.IdCategoria AND ev.IdEdicion = pre.IdEdicion WHERE pre.IdEdicion = %s GROUP BY c.NombreCategoria, p.Titulo, e.Anio ORDER BY c.NombreCategoria', (id_edicion,))
+        # Premios usa AnioEdicion — buscar el año de la edición solicitada
+        rows = query(
+            '''SELECT c.nombrecategoria AS NombreCategoria, p.titulo AS PeliculaGanadora,
+                      ROUND(AVG(ev.puntuacion), 2) AS PromedioJurado, pre.anioedicion AS Anio
+               FROM premios pre
+               INNER JOIN categorias c ON c.idcategoria = pre.idcategoria
+               INNER JOIN peliculas p ON p.idpelicula = pre.idpelicula
+               LEFT JOIN evaluaciones ev ON ev.idpelicula = pre.idpelicula AND ev.idcategoria = pre.idcategoria
+               JOIN ediciones ed ON ed.idedicion = %s
+               WHERE pre.anioedicion = ed.anio
+               GROUP BY c.nombrecategoria, p.titulo, pre.anioedicion
+               ORDER BY c.nombrecategoria''',
+            (id_edicion,)
+        )
     else:
-        rows = query('SELECT c.NombreCategoria, p.Titulo AS PeliculaGanadora, ROUND(AVG(ev.Puntuacion), 2) AS PromedioJurado, e.Anio FROM Premios pre INNER JOIN Categorias c ON c.IdCategoria = pre.IdCategoria INNER JOIN Peliculas p ON p.IdPelicula = pre.IdPelicula INNER JOIN Ediciones e ON e.IdEdicion = pre.IdEdicion INNER JOIN Evaluaciones ev ON ev.IdPelicula = pre.IdPelicula AND ev.IdCategoria = pre.IdCategoria AND ev.IdEdicion = pre.IdEdicion GROUP BY c.NombreCategoria, p.Titulo, e.Anio ORDER BY c.NombreCategoria')
+        rows = query(
+            '''SELECT c.nombrecategoria AS NombreCategoria, p.titulo AS PeliculaGanadora,
+                      ROUND(AVG(ev.puntuacion), 2) AS PromedioJurado, pre.anioedicion AS Anio
+               FROM premios pre
+               INNER JOIN categorias c ON c.idcategoria = pre.idcategoria
+               INNER JOIN peliculas p ON p.idpelicula = pre.idpelicula
+               LEFT JOIN evaluaciones ev ON ev.idpelicula = pre.idpelicula AND ev.idcategoria = pre.idcategoria
+               GROUP BY c.nombrecategoria, p.titulo, pre.anioedicion
+               ORDER BY c.nombrecategoria'''
+        )
     return _json([dict(r) for r in rows])
 
 @csrf_exempt
 @require_http_methods(["GET"])
 def reporte_financiero(request):
-    id_edicion = request.GET.get("id_edicion")
-    if id_edicion:
-        rows = query("SELECT t.NombreTarifa, COUNT(e.IdEntrada) AS Cantidad, SUM(t.Precio) AS Subtotal FROM Entradas e INNER JOIN Proyecciones pr ON pr.IdProyeccion = e.IdProyeccion INNER JOIN Tarifas t ON t.IdTarifa = e.IdTarifa WHERE pr.IdEdicion = %s GROUP BY t.NombreTarifa ORDER BY Subtotal DESC", (id_edicion,))
-    else:
-        rows = query("SELECT t.NombreTarifa, COUNT(e.IdEntrada) AS Cantidad, SUM(t.Precio) AS Subtotal FROM Entradas e INNER JOIN Tarifas t ON t.IdTarifa = e.IdTarifa GROUP BY t.NombreTarifa ORDER BY Subtotal DESC")
+    # Reporte financiero general de entradas (sin IdEdicion en Proyecciones)
+    rows = query(
+        '''SELECT t.nombretarifa AS NombreTarifa,
+                  COUNT(e.identrada) AS Cantidad,
+                  SUM(t.precio) AS Subtotal
+           FROM entradas e
+           INNER JOIN tarifas t ON t.idtarifa = e.idtarifa
+           GROUP BY t.nombretarifa
+           ORDER BY Subtotal DESC'''
+    )
     return _json([dict(r) for r in rows])
 
 @csrf_exempt
 @require_http_methods(["GET"])
 def reporte_ocupacion(request):
-    rows = query('SELECT s.NombreSala, se.NombreSede, s.Capacidad, COUNT(e.IdEntrada) AS EntradasVendidas, ROUND(COUNT(e.IdEntrada) * 100.0 / NULLIF(s.Capacidad, 0), 2) AS PorcentajeOcupacion FROM Salas s JOIN Sedes se ON se.IdSede = s.IdSede LEFT JOIN Proyecciones pr ON pr.IdSala = s.IdSala LEFT JOIN Entradas e ON e.IdProyeccion = pr.IdProyeccion GROUP BY s.IdSala, se.NombreSede ORDER BY PorcentajeOcupacion DESC')
+    rows = query(
+        '''SELECT s.nombresala AS NombreSala, se.nombresede AS NombreSede, s.capacidad AS Capacidad,
+                  COUNT(e.identrada) AS EntradasVendidas,
+                  ROUND(COUNT(e.identrada) * 100.0 / NULLIF(s.capacidad, 0), 2) AS PorcentajeOcupacion
+           FROM salas s
+           JOIN sedes se ON se.idsede = s.idsede
+           LEFT JOIN proyecciones pr ON pr.idsala = s.idsala
+           LEFT JOIN entradas e ON e.idproyeccion = pr.idproyeccion
+           GROUP BY s.idsala, se.nombresede
+           ORDER BY PorcentajeOcupacion DESC'''
+    )
     return _json([dict(r) for r in rows])
 
 @csrf_exempt
 @require_http_methods(["GET"])
 def reporte_ventas_edicion(request, id):
-    ent = query_one('SELECT COUNT(*) AS Cantidad, SUM(t.Precio) AS Total FROM Entradas e JOIN Tarifas t ON t.IdTarifa = e.IdTarifa JOIN Proyecciones pr ON pr.IdProyeccion = e.IdProyeccion WHERE pr.IdEdicion = %s', (id,))
-    abo = query_one('SELECT COUNT(*) AS Cantidad, SUM(ta.Precio) AS Total FROM Abonos a JOIN TiposAbono ta ON ta.IdTipoAbono = a.IdTipoAbono WHERE a.Pagado = TRUE AND a.IdEdicion = %s', (id,))
-    return _json({"entradas": ent if ent else {"Cantidad": 0, "Total": 0}, "abonos": abo if abo else {"Cantidad": 0, "Total": 0}})
+    # Sin IdEdicion en Proyecciones/Abonos, devolver totales generales
+    ent = query_one(
+        '''SELECT COUNT(*) AS Cantidad, COALESCE(SUM(t.precio), 0) AS Total
+           FROM entradas e
+           JOIN tarifas t ON t.idtarifa = e.idtarifa'''
+    )
+    abo = query_one(
+        '''SELECT COUNT(*) AS Cantidad, COALESCE(SUM(ta.precio), 0) AS Total
+           FROM abonos a
+           JOIN tiposabono ta ON ta.idtipoabono = a.idtipoabono
+           WHERE a.pagado = TRUE'''
+    )
+    return _json({
+        "entradas": ent if ent else {"Cantidad": 0, "Total": 0},
+        "abonos": abo if abo else {"Cantidad": 0, "Total": 0}
+    })
+
+# --- ROLES PELICULA ---
+@csrf_exempt
+@require_http_methods(["GET", "POST", "DELETE"])
+def roles_pelicula(request):
+    if request.method == "GET":
+        personal_id = request.GET.get("personal")
+        pelicula_id = request.GET.get("pelicula")
+        if personal_id:
+            rows = query('SELECT rp.*, p.Nombre AS Personal, pe.Titulo AS Pelicula FROM RolesPelicula rp JOIN Personal p ON p.IdPersonal = rp.IdPersonal JOIN Peliculas pe ON pe.IdPelicula = rp.IdPelicula WHERE rp.IdPersonal=%s', (personal_id,))
+        elif pelicula_id:
+            rows = query('SELECT rp.*, p.Nombre AS Personal, pe.Titulo AS Pelicula FROM RolesPelicula rp JOIN Personal p ON p.IdPersonal = rp.IdPersonal JOIN Peliculas pe ON pe.IdPelicula = rp.IdPelicula WHERE rp.IdPelicula=%s', (pelicula_id,))
+        else:
+            rows = query('SELECT rp.*, p.Nombre AS Personal, pe.Titulo AS Pelicula FROM RolesPelicula rp JOIN Personal p ON p.IdPersonal = rp.IdPersonal JOIN Peliculas pe ON pe.IdPelicula = rp.IdPelicula ORDER BY pe.Titulo, p.Nombre')
+        return _json([dict(r) for r in rows])
+
+    if request.method == "POST":
+        data = _body(request)
+        query('INSERT INTO RolesPelicula (IdPersonal, IdPelicula, Rol) VALUES (%s,%s,%s)',
+            (data["IdPersonal"], data["IdPelicula"], data["Rol"]))
+        return _json({"message": "Rol registrado"}, 201)
+
+    if request.method == "DELETE":
+        personal_id = request.GET.get("personal")
+        pelicula_id = request.GET.get("pelicula")
+        rol = request.GET.get("rol")
+        query('DELETE FROM RolesPelicula WHERE IdPersonal=%s AND IdPelicula=%s AND Rol=%s', (personal_id, pelicula_id, rol))
+        return _json({"message": "Rol eliminado"})
+

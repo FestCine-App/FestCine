@@ -5,25 +5,24 @@ export default function AdminProyecciones() {
   const [proyecciones, setProyecciones] = useState([])
   const [peliculas, setPeliculas] = useState([])
   const [salas, setSalas] = useState([])
-  const [ediciones, setEdiciones] = useState([])
-  const [form, setForm] = useState({ IdPelicula: '', IdSala: '', IdEdicion: '', FechaHora: '', TieneQA: false })
+  const [form, setForm] = useState({ IdPelicula: '', IdSala: '', FechaHora: '', TieneQA: false })
   const [msg, setMsg] = useState('')
   const [isError, setIsError] = useState(false)
 
   const load = () => api.getProyecciones().then(setProyecciones)
   useEffect(() => {
     load()
-    Promise.all([api.getPeliculas(), api.getSalas(), api.getEdiciones()])
-      .then(([p, s, e]) => { setPeliculas(p); setSalas(s); setEdiciones(e) })
+    Promise.all([api.getPeliculas(), api.getSalas()])
+      .then(([p, s]) => { setPeliculas(p); setSalas(s) })
   }, [])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     try {
-      const res = await api.createProyeccion({ ...form, IdPelicula: parseInt(form.IdPelicula), IdSala: parseInt(form.IdSala), IdEdicion: parseInt(form.IdEdicion) })
-      setMsg(res.message)
+      const res = await api.createProyeccion({ ...form, IdPelicula: parseInt(form.IdPelicula), IdSala: parseInt(form.IdSala) })
+      setMsg(res.message || 'Proyección programada exitosamente')
       setIsError(false)
-      setForm({ IdPelicula: '', IdSala: '', IdEdicion: '', FechaHora: '', TieneQA: false })
+      setForm({ IdPelicula: '', IdSala: '', FechaHora: '', TieneQA: false })
       load()
     } catch (err) {
       setMsg(err.message)
@@ -32,60 +31,121 @@ export default function AdminProyecciones() {
   }
 
   return (
-    <div>
-      <h2 style={{ marginTop: 0 }}>Programar Proyección</h2>
-      <form onSubmit={handleSubmit} style={{ background: '#fff', padding: 20, borderRadius: 8, marginBottom: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.1)', maxWidth: 500 }}>
-        <div style={{ marginBottom: 12 }}>
-          <select style={inp} value={form.IdPelicula} onChange={e => setForm({ ...form, IdPelicula: e.target.value })} required>
-            <option value="">Película</option>
-            {peliculas.map(p => <option key={p.IdPelicula} value={p.IdPelicula}>{p.Titulo}</option>)}
-          </select>
+    <div className="animate-fade-in">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+        <div>
+          <h2 style={{ fontSize: 28, fontWeight: 800, margin: 0 }}>Programación de Proyecciones</h2>
+          <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginTop: 4 }}>
+            Programe películas en salas y sedes específicas asignándolas a una edición.
+          </p>
         </div>
-        <div style={{ marginBottom: 12 }}>
-          <select style={inp} value={form.IdSala} onChange={e => setForm({ ...form, IdSala: e.target.value })} required>
-            <option value="">Sala</option>
-            {salas.map(s => <option key={s.IdSala} value={s.IdSala}>{s.NombreSala} - {s.NombreSede}</option>)}
-          </select>
-        </div>
-        <div style={{ marginBottom: 12 }}>
-          <select style={inp} value={form.IdEdicion} onChange={e => setForm({ ...form, IdEdicion: e.target.value })} required>
-            <option value="">Edición</option>
-            {ediciones.map(e => <option key={e.IdEdicion} value={e.IdEdicion}>{e.NombreEdicion}</option>)}
-          </select>
-        </div>
-        <div style={{ marginBottom: 12 }}>
-          <input type="datetime-local" style={inp} value={form.FechaHora} onChange={e => setForm({ ...form, FechaHora: e.target.value })} required />
-        </div>
-        <div style={{ marginBottom: 12 }}>
-          <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <input type="checkbox" checked={form.TieneQA} onChange={e => setForm({ ...form, TieneQA: e.target.checked })} />
-            Incluye Q&A
-          </label>
-        </div>
-        <button type="submit" style={btn}>Programar</button>
-        {msg && <p style={{ fontSize: 13, marginTop: 8, color: isError ? '#c0392b' : '#27ae60', background: isError ? '#fce4e4' : '#e8f8e8', padding: '8px 12px', borderRadius: 4 }}>{msg}</p>}
-      </form>
+        {msg && (
+          <div style={{ 
+            padding: '8px 16px', 
+            background: isError ? 'rgba(244, 63, 94, 0.15)' : 'rgba(16, 185, 129, 0.15)', 
+            border: isError ? '1px solid rgba(244, 63, 94, 0.3)' : '1px solid rgba(16, 185, 129, 0.3)', 
+            borderRadius: 8, 
+            fontSize: 13, 
+            color: isError ? '#fb7185' : '#34d399', 
+            fontWeight: 600 
+          }}>
+            {msg}
+          </div>
+        )}
+      </div>
 
-      <table style={{ width: '100%', borderCollapse: 'collapse', background: '#fff', borderRadius: 8, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-        <thead style={{ background: '#1a1a2e', color: '#fff' }}>
-          <tr><th style={th}>Película</th><th style={th}>Sala</th><th style={th}>Fecha</th><th style={th}>Aforo</th><th style={th}>Q&A</th></tr>
-        </thead>
-        <tbody>
-          {proyecciones.map(p => (
-            <tr key={p.IdProyeccion} style={{ borderBottom: '1px solid #eee' }}>
-              <td style={td}>{p.Titulo}</td><td style={td}>{p.NombreSala}</td>
-              <td style={td}>{new Date(p.FechaHora).toLocaleString('es-BO')}</td>
-              <td style={td}>{p.AforoDisponible}/{p.Capacidad}</td>
-              <td style={td}>{p.TieneQA ? 'Sí' : 'No'}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: 24, alignItems: 'start' }}>
+        <div className="glass-card">
+          <h3 style={{ fontSize: 18, marginBottom: 16 }}>Programar Nueva Fecha</h3>
+          <form onSubmit={handleSubmit}>
+            <div className="form-group">
+              <label className="form-label">Película Seleccionada *</label>
+              <select className="select" value={form.IdPelicula} onChange={e => setForm({ ...form, IdPelicula: e.target.value })} required>
+                <option value="">Seleccione película...</option>
+                {peliculas.map(p => <option key={p.IdPelicula} value={p.IdPelicula}>{p.Titulo}</option>)}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Sala de Exhibición *</label>
+              <select className="select" value={form.IdSala} onChange={e => setForm({ ...form, IdSala: e.target.value })} required>
+                <option value="">Seleccione sala...</option>
+                {salas.map(s => <option key={s.IdSala} value={s.IdSala}>{s.NombreSala} ({s.NombreSede})</option>)}
+              </select>
+            </div>
+
+
+
+            <div className="form-group">
+              <label className="form-label">Fecha y Hora *</label>
+              <input type="datetime-local" className="input" value={form.FechaHora} onChange={e => setForm({ ...form, FechaHora: e.target.value })} required />
+            </div>
+
+            <div className="form-group">
+              <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                <input type="checkbox" checked={form.TieneQA} onChange={e => setForm({ ...form, TieneQA: e.target.checked })} style={{ accentColor: 'var(--accent-purple)' }} />
+                Incluye Conversatorio Q&A con Director/Elenco
+              </label>
+            </div>
+
+            <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: 12 }}>
+              Programar Función
+            </button>
+          </form>
+        </div>
+
+        <div className="table-container">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Película</th>
+                <th>Sala / Ubicación</th>
+                <th>Fecha y Hora</th>
+                <th>Aforo Disponible</th>
+                <th>Q&A</th>
+              </tr>
+            </thead>
+            <tbody>
+              {proyecciones.length === 0 ? (
+                <tr>
+                  <td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: 30 }}>
+                    No hay proyecciones programadas en esta edición.
+                  </td>
+                </tr>
+              ) : (
+                proyecciones.map(p => (
+                  <tr key={p.IdProyeccion}>
+                    <td style={{ fontWeight: 600 }}>{p.Titulo}</td>
+                    <td>
+                      <div>{p.NombreSala}</div>
+                      <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{p.NombreSede}</div>
+                    </td>
+                    <td>{new Date(p.FechaHora).toLocaleString('es-BO', { dateStyle: 'medium', timeStyle: 'short' })}</td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span>{p.AforoDisponible} / {p.Capacidad}</span>
+                        <div style={{ width: 60, height: 6, background: 'rgba(255,255,255,0.06)', borderRadius: 3, overflow: 'hidden' }}>
+                          <div style={{ 
+                            height: '100%', 
+                            width: `${Math.max(0, Math.min(100, (p.AforoDisponible / p.Capacidad) * 100))}%`, 
+                            background: p.AforoDisponible === 0 ? 'var(--accent-rose)' : 'var(--accent-emerald)' 
+                          }} />
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <span className={`badge ${p.TieneQA ? 'badge-premiada' : 'badge-postulada'}`}>
+                        {p.TieneQA ? 'Sí' : 'No'}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   )
 }
 
-const inp = { width: '100%', padding: '8px 10px', border: '1px solid #ccc', borderRadius: 4, fontSize: 14, boxSizing: 'border-box' }
-const btn = { padding: '10px 20px', background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 4, fontSize: 14, fontWeight: 600, cursor: 'pointer' }
-const th = { padding: '8px 12px', textAlign: 'left', fontSize: 13 }
-const td = { padding: '8px 12px', fontSize: 13 }

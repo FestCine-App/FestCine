@@ -3,16 +3,14 @@ import api from '../api'
 
 export default function AdminEventos() {
   const [eventos, setEventos] = useState([])
-  const [ediciones, setEdiciones] = useState([])
   const [personal, setPersonal] = useState([])
-  const [form, setForm] = useState({ IdEdicion: '', NombreEvento: '', TipoEvento: 'Masterclass', FechaHora: '', Aforo: '', CostoInscripcion: '0', expositores: [] })
+  const [form, setForm] = useState({ NombreEvento: '', TipoEvento: 'Masterclass', FechaHora: '', Aforo: '', CostoInscripcion: '0', expositores: [] })
   const [msg, setMsg] = useState('')
 
   const load = () => api.getEventos().then(setEventos)
   useEffect(() => {
     load()
-    Promise.all([api.getEdiciones(), api.getPersonal()])
-      .then(([e, p]) => { setEdiciones(e); setPersonal(p) })
+    api.getPersonal().then(setPersonal)
   }, [])
 
   const toggleExpositor = (id) => {
@@ -25,74 +23,128 @@ export default function AdminEventos() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     try {
-      await api.createEvento({ ...form, Aforo: parseInt(form.Aforo), CostoInscripcion: parseFloat(form.CostoInscripcion), IdEdicion: parseInt(form.IdEdicion) })
-      setMsg('Evento creado')
-      setForm({ IdEdicion: '', NombreEvento: '', TipoEvento: 'Masterclass', FechaHora: '', Aforo: '', CostoInscripcion: '0', expositores: [] })
+      await api.createEvento({ ...form, Aforo: parseInt(form.Aforo), CostoInscripcion: parseFloat(form.CostoInscripcion) })
+      setMsg('Evento paralelo programado exitosamente')
+      setForm({ NombreEvento: '', TipoEvento: 'Masterclass', FechaHora: '', Aforo: '', CostoInscripcion: '0', expositores: [] })
       load()
     } catch (err) { setMsg('Error: ' + err.message) }
   }
 
   return (
-    <div>
-      <h2 style={{ marginTop: 0 }}>Registrar Evento</h2>
-      <form onSubmit={handleSubmit} style={{ background: '#fff', padding: 20, borderRadius: 8, marginBottom: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.1)', maxWidth: 500 }}>
-        <div style={{ marginBottom: 12 }}>
-          <select style={inp} value={form.IdEdicion} onChange={e => setForm({ ...form, IdEdicion: e.target.value })} required>
-            <option value="">Edición</option>
-            {ediciones.map(e => <option key={e.IdEdicion} value={e.IdEdicion}>{e.NombreEdicion}</option>)}
-          </select>
+    <div className="animate-fade-in">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+        <div>
+          <h2 style={{ fontSize: 28, fontWeight: 800, margin: 0 }}>Gestión de Eventos Paralelos</h2>
+          <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginTop: 4 }}>
+            Organice talleres, masterclasses, paneles de discusión y eventos de networking del festival.
+          </p>
         </div>
-        <div style={{ marginBottom: 12 }}>
-          <input placeholder="Nombre del Evento" style={inp} value={form.NombreEvento} onChange={e => setForm({ ...form, NombreEvento: e.target.value })} required />
-        </div>
-        <div style={{ marginBottom: 12 }}>
-          <select style={inp} value={form.TipoEvento} onChange={e => setForm({ ...form, TipoEvento: e.target.value })}>
-            {['Masterclass','Taller','Coctel'].map(t => <option key={t}>{t}</option>)}
-          </select>
-        </div>
-        <div style={{ marginBottom: 12 }}>
-          <input type="datetime-local" style={inp} value={form.FechaHora} onChange={e => setForm({ ...form, FechaHora: e.target.value })} required />
-        </div>
-        <div style={{ marginBottom: 12 }}>
-          <input placeholder="Aforo" type="number" style={inp} value={form.Aforo} onChange={e => setForm({ ...form, Aforo: e.target.value })} required />
-        </div>
-        <div style={{ marginBottom: 12 }}>
-          <input placeholder="Costo (0 si gratuito)" type="number" step="0.01" style={inp} value={form.CostoInscripcion} onChange={e => setForm({ ...form, CostoInscripcion: e.target.value })} />
-        </div>
-        <div style={{ marginBottom: 12 }}>
-          <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 4 }}>Expositores</label>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {personal.map(p => (
-              <label key={p.IdPersonal} style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 4 }}>
-                <input type="checkbox" checked={form.expositores.includes(p.IdPersonal)} onChange={() => toggleExpositor(p.IdPersonal)} />
-                {p.Nombre}
-              </label>
-            ))}
-          </div>
-        </div>
-        <button type="submit" style={btn}>Crear Evento</button>
-        {msg && <p style={{ fontSize: 13, marginTop: 8 }}>{msg}</p>}
-      </form>
+        {msg && <div style={{ padding: '8px 16px', background: 'rgba(139, 92, 246, 0.15)', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: 8, fontSize: 13, color: '#c084fc', fontWeight: 600 }}>{msg}</div>}
+      </div>
 
-      <table style={{ width: '100%', borderCollapse: 'collapse', background: '#fff', borderRadius: 8, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-        <thead style={{ background: '#1a1a2e', color: '#fff' }}>
-          <tr><th style={th}>Nombre</th><th style={th}>Tipo</th><th style={th}>Fecha</th><th style={th}>Aforo</th><th style={th}>Expositores</th></tr>
-        </thead>
-        <tbody>
-          {eventos.map(e => (
-            <tr key={e.IdEvento} style={{ borderBottom: '1px solid #eee' }}>
-              <td style={td}>{e.NombreEvento}</td><td style={td}>{e.TipoEvento}</td>
-              <td style={td}>{new Date(e.FechaHora).toLocaleString('es-BO')}</td>
-              <td style={td}>{e.Aforo}</td><td style={td}>{e.Expositores}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div style={{ display: 'grid', gridTemplateColumns: '380px 1fr', gap: 24, alignItems: 'start' }}>
+        <div className="glass-card">
+          <h3 style={{ fontSize: 18, marginBottom: 16 }}>Programar Evento</h3>
+          <form onSubmit={handleSubmit}>
+            <div className="form-group">
+              <label className="form-label">Nombre del Evento *</label>
+              <input placeholder="Ej. Taller de Dirección de Fotografía" className="input" value={form.NombreEvento} onChange={e => setForm({ ...form, NombreEvento: e.target.value })} required />
+            </div>
+
+            <div className="grid-2" style={{ marginBottom: 16 }}>
+              <div>
+                <label className="form-label">Tipo de Evento *</label>
+                <select className="select" value={form.TipoEvento} onChange={e => setForm({ ...form, TipoEvento: e.target.value })}>
+                  {['Masterclass','Taller','Coctel','Panel','Foro'].map(t => <option key={t}>{t}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="form-label">Fecha y Hora *</label>
+                <input type="datetime-local" className="input" value={form.FechaHora} onChange={e => setForm({ ...form, FechaHora: e.target.value })} required />
+              </div>
+            </div>
+
+            <div className="grid-2" style={{ marginBottom: 16 }}>
+              <div>
+                <label className="form-label">Aforo *</label>
+                <input placeholder="Ej. 50" type="number" className="input" value={form.Aforo} onChange={e => setForm({ ...form, Aforo: e.target.value })} required />
+              </div>
+              <div>
+                <label className="form-label">Costo (Bs.) *</label>
+                <input placeholder="0 si es gratuito" type="number" step="0.01" className="input" value={form.CostoInscripcion} onChange={e => setForm({ ...form, CostoInscripcion: e.target.value })} />
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Ponentes / Expositores</label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 6, maxHeight: 150, overflowY: 'auto', background: 'rgba(0,0,0,0.2)', padding: 12, borderRadius: 8, border: '1px solid rgba(255,255,255,0.04)' }}>
+                {personal.length === 0 ? (
+                  <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>No hay personal registrado</span>
+                ) : (
+                  personal.map(p => (
+                    <label key={p.IdPersonal} style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                      <input type="checkbox" checked={form.expositores.includes(p.IdPersonal)} onChange={() => toggleExpositor(p.IdPersonal)} style={{ accentColor: 'var(--accent-purple)' }} />
+                      {p.Nombre}
+                    </label>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: 12 }}>
+              Crear Evento
+            </button>
+          </form>
+        </div>
+
+        <div className="table-container">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Nombre Evento</th>
+                <th>Tipo</th>
+                <th>Fecha y Hora</th>
+                <th>Costo / Aforo</th>
+                <th>Expositores</th>
+              </tr>
+            </thead>
+            <tbody>
+              {eventos.length === 0 ? (
+                <tr>
+                  <td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: 30 }}>
+                    No hay eventos programados todavía.
+                  </td>
+                </tr>
+              ) : (
+                eventos.map(e => (
+                  <tr key={e.IdEvento}>
+                    <td style={{ fontWeight: 600 }}>{e.NombreEvento}</td>
+                    <td>
+                      <span className={`badge ${
+                        e.TipoEvento === 'Masterclass' ? 'badge-premiada' :
+                        e.TipoEvento === 'Taller' ? 'badge-seleccionada' : 'badge-postulada'
+                      }`}>
+                        {e.TipoEvento}
+                      </span>
+                    </td>
+                    <td>{new Date(e.FechaHora).toLocaleString('es-BO', { dateStyle: 'medium', timeStyle: 'short' })}</td>
+                    <td style={{ fontSize: 13 }}>
+                      <div>Aforo: {e.Aforo}</div>
+                      <div style={{ color: parseFloat(e.CostoInscripcion) > 0 ? 'var(--accent-emerald)' : 'var(--text-secondary)' }}>
+                        {parseFloat(e.CostoInscripcion) > 0 ? `Bs. ${parseFloat(e.CostoInscripcion).toFixed(2)}` : 'Gratuito'}
+                      </div>
+                    </td>
+                    <td style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                      {e.Expositores || '-'}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   )
 }
 
-const inp = { width: '100%', padding: '8px 10px', border: '1px solid #ccc', borderRadius: 4, fontSize: 14, boxSizing: 'border-box' }
-const btn = { padding: '10px 20px', background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 4, fontSize: 14, fontWeight: 600, cursor: 'pointer' }
-const th = { padding: '8px 12px', textAlign: 'left', fontSize: 13 }
-const td = { padding: '8px 12px', fontSize: 13 }
