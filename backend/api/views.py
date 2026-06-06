@@ -2,7 +2,7 @@ import json
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from config.database import query, query_one
+from config.database import query, query_one, call_vender_abono
 
 def _json(data, status=200):
     return JsonResponse(data, safe=False, status=status)
@@ -114,14 +114,13 @@ def entradas(request):
                     (int(data["IdAsistente"]), int(data["IdEvento"]), int(data["IdTarifa"])))
             else:
                 return _error("Debe especificar una proyeccion o un evento")
-            
+
             msg = rows[0]["Respuesta"] if rows else ""
             if msg.startswith("Error"):
                 return _error(msg)
             return _json({"message": msg}, 201)
         except Exception as e:
             return _error(str(e).split("\n")[0])
-
 
 # --- ABONOS ---
 @csrf_exempt
@@ -140,9 +139,15 @@ def abonos(request):
     if request.method == "POST":
         data = _body(request)
         try:
-            rows = query('SELECT * FROM fn_call_venderabono(%s,%s,%s)',
-                (data["IdAsistente"], data["IdTipoAbono"], data.get("PagoExitoso", True)))
-            msg = rows[0]["Respuesta"] if rows else ""
+            # CORRECCIÓN: call_vender_abono() llama CALL VenderAbono() directo
+            # con autocommit=True — evita el error "terminación de transacción
+            # no válida" que ocurría al llamar fn_call_venderabono (FUNCTION
+            # que internamente usaba ROLLBACK explícito).
+            msg = call_vender_abono(
+                int(data["IdAsistente"]),
+                int(data["IdTipoAbono"]),
+                bool(data.get("PagoExitoso", True))
+            )
             if msg.startswith("Error"):
                 return _error(msg)
             return _json({"message": msg}, 201)
@@ -285,7 +290,6 @@ def personal(request, id=None):
         query('DELETE FROM Personal WHERE IdPersonal=%s', (id,))
         return _json({"message": "Eliminado"})
 
-
 # --- CATEGORIAS ---
 @csrf_exempt
 @require_http_methods(["GET", "POST", "PUT", "DELETE"])
@@ -316,7 +320,6 @@ def categorias(request, id=None):
         query('DELETE FROM Categorias WHERE IdCategoria=%s', (id,))
         return _json({"message": "Eliminado"})
 
-
 # --- JURADOS ---
 @csrf_exempt
 @require_http_methods(["GET", "POST", "PUT", "DELETE"])
@@ -344,7 +347,6 @@ def jurados(request, id=None):
         query('DELETE FROM Evaluaciones WHERE IdMiembro=%s', (id,))
         query('DELETE FROM MiembrosJurado WHERE IdMiembro=%s', (id,))
         return _json({"message": "Eliminado"})
-
 
 # --- EVALUACIONES ---
 @csrf_exempt
@@ -392,7 +394,6 @@ def evaluaciones(request, id=None):
         query('DELETE FROM Evaluaciones WHERE IdEvaluacion=%s', (id,))
         return _json({"message": "Eliminado"})
 
-
 # --- PATROCINADORES ---
 @csrf_exempt
 @require_http_methods(["GET", "POST", "PUT", "DELETE"])
@@ -419,7 +420,6 @@ def patrocinadores(request, id=None):
         query('DELETE FROM PatrocinioEdicion WHERE IdPatrocinador=%s', (id,))
         query('DELETE FROM Patrocinadores WHERE IdPatrocinador=%s', (id,))
         return _json({"message": "Eliminado"})
-
 
 # --- PATROCINIOS ---
 @csrf_exempt
@@ -448,7 +448,6 @@ def patrocinios(request, id=None):
         query('DELETE FROM PatrocinioEdicion WHERE IdPatrocinio=%s', (id,))
         return _json({"message": "Eliminado"})
 
-
 # --- EDICIONES ---
 @csrf_exempt
 @require_http_methods(["GET", "POST", "PUT", "DELETE"])
@@ -476,7 +475,6 @@ def ediciones(request, id=None):
         query('DELETE FROM Ediciones WHERE IdEdicion=%s', (id,))
         return _json({"message": "Eliminada"})
 
-
 # --- HOTELES ---
 @csrf_exempt
 @require_http_methods(["GET", "POST", "PUT", "DELETE"])
@@ -503,7 +501,6 @@ def hoteles(request, id=None):
         query('DELETE FROM Alojamientos WHERE IdHotel=%s', (id,))
         query('DELETE FROM Hoteles WHERE IdHotel=%s', (id,))
         return _json({"message": "Eliminado"})
-
 
 # --- ALOJAMIENTOS ---
 @csrf_exempt
@@ -548,7 +545,6 @@ def alojamientos(request, id=None):
     if request.method == "DELETE":
         query('DELETE FROM Alojamientos WHERE IdAlojamiento=%s', (id,))
         return _json({"message": "Eliminado"})
-
 
 # --- TRASLADOS ---
 @csrf_exempt
@@ -599,36 +595,42 @@ def premios(request, id=None):
     if request.method == "GET":
         if id:
             r = query_one(
-                '''SELECT pre.*, c.nombrecategoria AS NombreCategoria, p.titulo AS Pelicula
+                '''SELECT pre.*, c.nombrecategoria AS NombreCategoria, p.titulo AS Pelicula,
+                          e.anio AS Anio, e.nombreedicion AS NombreEdicion
                    FROM Premios pre
                    JOIN Categorias c ON c.idcategoria = pre.idcategoria
                    JOIN Peliculas p ON p.idpelicula = pre.idpelicula
+                   JOIN Ediciones e ON e.idedicion = pre.idedicion
                    WHERE pre.idpremio=%s''',
                 (id,)
             )
             return _json(r) if r else _not_found()
         rows = query(
-            '''SELECT pre.*, c.nombrecategoria AS NombreCategoria, p.titulo AS Pelicula
+            '''SELECT pre.*, c.nombrecategoria AS NombreCategoria, p.titulo AS Pelicula,
+                      e.anio AS Anio, e.nombreedicion AS NombreEdicion
                FROM Premios pre
                JOIN Categorias c ON c.idcategoria = pre.idcategoria
                JOIN Peliculas p ON p.idpelicula = pre.idpelicula
-               ORDER BY pre.anioedicion DESC, c.nombrecategoria'''
+               JOIN Ediciones e ON e.idedicion = pre.idedicion
+               ORDER BY e.anio DESC, c.nombrecategoria'''
         )
         return _json([dict(r) for r in rows])
 
     if request.method == "POST":
         data = _body(request)
+        # CORRECCIÓN: usa IdEdicion (FK a Ediciones) en lugar de AnioEdicion (INT suelto)
         r = query_one(
-            'INSERT INTO Premios (IdCategoria, IdPelicula, AnioEdicion) VALUES (%s,%s,%s) RETURNING IdPremio',
-            (data["IdCategoria"], data["IdPelicula"], data.get("AnioEdicion", 2026))
+            'INSERT INTO Premios (IdCategoria, IdPelicula, IdEdicion) VALUES (%s,%s,%s) RETURNING IdPremio',
+            (data["IdCategoria"], data["IdPelicula"], data.get("IdEdicion", 3))
         )
         return _json({"id": r["IdPremio"]}, 201)
 
     if request.method == "PUT":
         data = _body(request)
+        # CORRECCIÓN: usa IdEdicion (FK a Ediciones) en lugar de AnioEdicion (INT suelto)
         query(
-            'UPDATE Premios SET IdCategoria=%s, IdPelicula=%s, AnioEdicion=%s WHERE IdPremio=%s',
-            (data["IdCategoria"], data["IdPelicula"], data.get("AnioEdicion", 2026), id)
+            'UPDATE Premios SET IdCategoria=%s, IdPelicula=%s, IdEdicion=%s WHERE IdPremio=%s',
+            (data["IdCategoria"], data["IdPelicula"], data.get("IdEdicion", 3), id)
         )
         return _json({"message": "Actualizado"})
 
@@ -636,19 +638,16 @@ def premios(request, id=None):
         query('DELETE FROM Premios WHERE IdPremio=%s', (id,))
         return _json({"message": "Eliminado"})
 
-
 # --- TARIFAS ---
 @csrf_exempt
 @require_http_methods(["GET"])
 def tarifas(request):
-    # Tarifas solo tiene: IdTarifa, NombreTarifa, Precio
     return _json([dict(r) for r in query('SELECT idtarifa AS IdTarifa, nombretarifa AS NombreTarifa, precio AS Precio FROM tarifas ORDER BY precio')])
 
 # --- TIPOS ABONO ---
 @csrf_exempt
 @require_http_methods(["GET"])
 def tiposabono(request):
-    # TiposAbono tiene: IdTipoAbono, NombreAbono, Descripcion, Precio
     return _json([dict(r) for r in query('SELECT idtipoabono AS IdTipoAbono, nombreabono AS NombreAbono, descripcion AS Descripcion, precio AS Precio FROM tiposabono ORDER BY precio')])
 
 # --- COMPETENCIA PELICULA ---
@@ -676,12 +675,10 @@ def competencia(request):
         query('DELETE FROM CompetenciaPelicula WHERE IdPelicula=%s AND IdCategoria=%s', (pelicula_id, categoria_id))
         return _json({"message": "Eliminada de competencia"})
 
-
 # --- REPORTES ---
 @csrf_exempt
 @require_http_methods(["GET"])
 def reporte_ranking(request):
-    # Ranking de películas por asistentes (sin filtro por edición — Proyecciones no tiene IdEdicion)
     rows = query(
         '''SELECT p.titulo AS Titulo,
                   COUNT(e.identrada) AS Asistentes,
@@ -701,29 +698,31 @@ def reporte_ranking(request):
 def reporte_premiacion(request):
     id_edicion = request.GET.get("id_edicion")
     if id_edicion:
-        # Premios usa AnioEdicion — buscar el año de la edición solicitada
         rows = query(
             '''SELECT c.nombrecategoria AS NombreCategoria, p.titulo AS PeliculaGanadora,
-                      ROUND(AVG(ev.puntuacion), 2) AS PromedioJurado, pre.anioedicion AS Anio
+                      ROUND(AVG(ev.puntuacion), 2) AS PromedioJurado, ed.anio AS Anio
                FROM premios pre
                INNER JOIN categorias c ON c.idcategoria = pre.idcategoria
                INNER JOIN peliculas p ON p.idpelicula = pre.idpelicula
-               LEFT JOIN evaluaciones ev ON ev.idpelicula = pre.idpelicula AND ev.idcategoria = pre.idcategoria
-               JOIN ediciones ed ON ed.idedicion = %s
-               WHERE pre.anioedicion = ed.anio
-               GROUP BY c.nombrecategoria, p.titulo, pre.anioedicion
+               INNER JOIN ediciones ed ON ed.idedicion = pre.idedicion
+               LEFT JOIN evaluaciones ev ON ev.idpelicula = pre.idpelicula
+                                        AND ev.idcategoria = pre.idcategoria
+               WHERE pre.idedicion = %s
+               GROUP BY c.nombrecategoria, p.titulo, ed.anio
                ORDER BY c.nombrecategoria''',
             (id_edicion,)
         )
     else:
         rows = query(
             '''SELECT c.nombrecategoria AS NombreCategoria, p.titulo AS PeliculaGanadora,
-                      ROUND(AVG(ev.puntuacion), 2) AS PromedioJurado, pre.anioedicion AS Anio
+                      ROUND(AVG(ev.puntuacion), 2) AS PromedioJurado, ed.anio AS Anio
                FROM premios pre
                INNER JOIN categorias c ON c.idcategoria = pre.idcategoria
                INNER JOIN peliculas p ON p.idpelicula = pre.idpelicula
-               LEFT JOIN evaluaciones ev ON ev.idpelicula = pre.idpelicula AND ev.idcategoria = pre.idcategoria
-               GROUP BY c.nombrecategoria, p.titulo, pre.anioedicion
+               INNER JOIN ediciones ed ON ed.idedicion = pre.idedicion
+               LEFT JOIN evaluaciones ev ON ev.idpelicula = pre.idpelicula
+                                        AND ev.idcategoria = pre.idcategoria
+               GROUP BY c.nombrecategoria, p.titulo, ed.anio
                ORDER BY c.nombrecategoria'''
         )
     return _json([dict(r) for r in rows])
@@ -731,7 +730,6 @@ def reporte_premiacion(request):
 @csrf_exempt
 @require_http_methods(["GET"])
 def reporte_financiero(request):
-    # Reporte financiero general de entradas (sin IdEdicion en Proyecciones)
     rows = query(
         '''SELECT t.nombretarifa AS NombreTarifa,
                   COUNT(e.identrada) AS Cantidad,
@@ -754,7 +752,7 @@ def reporte_ocupacion(request):
            JOIN sedes se ON se.idsede = s.idsede
            LEFT JOIN proyecciones pr ON pr.idsala = s.idsala
            LEFT JOIN entradas e ON e.idproyeccion = pr.idproyeccion
-           GROUP BY s.idsala, se.nombresede
+           GROUP BY s.idsala, s.nombresala, se.nombresede, s.capacidad
            ORDER BY PorcentajeOcupacion DESC'''
     )
     return _json([dict(r) for r in rows])
@@ -762,7 +760,6 @@ def reporte_ocupacion(request):
 @csrf_exempt
 @require_http_methods(["GET"])
 def reporte_ventas_edicion(request, id):
-    # Sin IdEdicion en Proyecciones/Abonos, devolver totales generales
     ent = query_one(
         '''SELECT COUNT(*) AS Cantidad, COALESCE(SUM(t.precio), 0) AS Total
            FROM entradas e
@@ -806,4 +803,3 @@ def roles_pelicula(request):
         rol = request.GET.get("rol")
         query('DELETE FROM RolesPelicula WHERE IdPersonal=%s AND IdPelicula=%s AND Rol=%s', (personal_id, pelicula_id, rol))
         return _json({"message": "Rol eliminado"})
-
