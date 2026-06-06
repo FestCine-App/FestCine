@@ -156,25 +156,39 @@ function PremiacionTable({ data }) {
 }
 
 function FinancieroTable({ data }) {
-  const total = data.reduce((s, r) => s + parseFloat(r.Subtotal || 0), 0)
+  // Compatibilidad: el endpoint ahora devuelve un informe unificado
+  // { detalle: [...], totalGeneral, totalPorTipoVenta } desglosado por
+  // Tipo de Venta (Entrada Individual / Abono) y Categoría (tarifa / tipo de abono).
+  const detalle = Array.isArray(data) ? data : (data?.detalle || [])
+  const totalGeneral = Array.isArray(data)
+    ? detalle.reduce((s, r) => s + parseFloat(r.Subtotal || 0), 0)
+    : (data?.totalGeneral ?? 0)
+  const totalPorTipoVenta = Array.isArray(data) ? {} : (data?.totalPorTipoVenta || {})
+
   return (
     <div>
       <div className="table-container">
         <table className="table">
           <thead>
             <tr>
-              <th>Tarifa / Tipo Venta</th>
+              <th>Tipo de Venta</th>
+              <th>Tarifa / Tipo de Abono</th>
               <th>Cantidad Vendida</th>
               <th style={{ textAlign: 'right' }}>Subtotal</th>
             </tr>
           </thead>
           <tbody>
-            {data.length === 0 ? (
-              <tr><td colSpan={3} style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>Sin ingresos registrados</td></tr>
+            {detalle.length === 0 ? (
+              <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>Sin ingresos registrados</td></tr>
             ) : (
-              data.map((r, i) => (
+              detalle.map((r, i) => (
                 <tr key={i}>
-                  <td style={{ fontWeight: 600 }}>{r.NombreTarifa}</td>
+                  <td>
+                    <span className={`badge ${r.TipoVenta === 'Abono' ? 'badge-premiada' : 'badge-postulada'}`}>
+                      {r.TipoVenta || r.NombreTarifa}
+                    </span>
+                  </td>
+                  <td style={{ fontWeight: 600 }}>{r.Categoria ?? r.NombreTarifa}</td>
                   <td>{r.Cantidad}</td>
                   <td style={{ textAlign: 'right', color: 'var(--accent-emerald)', fontWeight: 600 }}>
                     Bs. {parseFloat(r.Subtotal).toFixed(2)}
@@ -185,9 +199,21 @@ function FinancieroTable({ data }) {
           </tbody>
         </table>
       </div>
+
+      {Object.keys(totalPorTipoVenta).length > 0 && (
+        <div style={{ display: 'flex', gap: 16, marginTop: 16, flexWrap: 'wrap' }}>
+          {Object.entries(totalPorTipoVenta).map(([tipo, monto]) => (
+            <div key={tipo} style={{ flex: 1, minWidth: 200, padding: '12px 20px', background: 'rgba(255,255,255,0.04)', borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)' }}>
+              <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{tipo}</div>
+              <div style={{ fontSize: 18, fontWeight: 700 }}>Bs. {parseFloat(monto).toFixed(2)}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16, padding: '12px 20px', background: 'rgba(16, 185, 129, 0.08)', borderRadius: 8, border: '1px solid rgba(16, 185, 129, 0.15)' }}>
         <span style={{ fontSize: 16, fontWeight: 800, color: '#fff' }}>
-          TOTAL RECAUDADO: <span style={{ color: 'var(--accent-emerald)', marginLeft: 8 }}>Bs. {total.toFixed(2)}</span>
+          TOTAL RECAUDADO: <span style={{ color: 'var(--accent-emerald)', marginLeft: 8 }}>Bs. {parseFloat(totalGeneral).toFixed(2)}</span>
         </span>
       </div>
     </div>

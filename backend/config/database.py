@@ -114,6 +114,16 @@ def call_procedure(sql, params=None):
     return query(sql, params)
 
 
+def call_vender_abono(id_asistente, id_tipo_abono, id_edicion, pago_exitoso):
+    """Invoca la función wrapper fn_call_venderabono (-> PROCEDURE VenderAbono)
+    y devuelve el mensaje de respuesta (string) que emite la BD."""
+    rows = query(
+        'SELECT * FROM fn_call_venderabono(%s,%s,%s,%s)',
+        (id_asistente, id_tipo_abono, id_edicion, pago_exitoso)
+    )
+    return rows[0]["Respuesta"] if rows else ""
+
+
 # ============================================================
 # AUTO-INICIALIZACIÓN: Crea vistas y funciones faltantes al
 # arrancar el servidor Django.
@@ -235,10 +245,10 @@ _INIT_SQL = [
     """,
 
     # --- Función wrapper: fn_call_programarproyeccion ---
-    # ProgramarProyeccion real: (p_IdPelicula, p_IdSala, p_FechaHora, p_TieneQA, OUT p_IdNuevo, OUT p_Respuesta)
+    # ProgramarProyeccion real: (p_IdPelicula, p_IdSala, p_IdEdicion, p_FechaHora, p_TieneQA, OUT p_IdNuevo, OUT p_Respuesta)
     """
     CREATE OR REPLACE FUNCTION fn_call_programarproyeccion(
-        p_IdPelicula INT, p_IdSala INT,
+        p_IdPelicula INT, p_IdSala INT, p_IdEdicion INT,
         p_FechaHora TIMESTAMP, p_TieneQA BOOLEAN
     ) RETURNS TABLE (respuesta VARCHAR)
     LANGUAGE plpgsql AS $$
@@ -246,21 +256,21 @@ _INIT_SQL = [
         v_id   INT;
         v_resp VARCHAR;
     BEGIN
-        CALL ProgramarProyeccion(p_IdPelicula, p_IdSala, p_FechaHora, p_TieneQA, v_id, v_resp);
+        CALL ProgramarProyeccion(p_IdPelicula, p_IdSala, p_IdEdicion, p_FechaHora, p_TieneQA, v_id, v_resp);
         RETURN QUERY SELECT v_resp;
     END; $$
     """,
 
     # --- Función wrapper: fn_call_venderabono ---
-    # VenderAbono real: (p_IdAsistente, p_IdTipoAbono, p_PagoExitoso, OUT p_Respuesta)
+    # VenderAbono real: (p_IdAsistente, p_IdTipoAbono, p_IdEdicion, p_PagoExitoso, OUT p_Respuesta)
     """
     CREATE OR REPLACE FUNCTION fn_call_venderabono(
-        p_IdAsistente INT, p_IdTipoAbono INT, p_PagoExitoso BOOLEAN
+        p_IdAsistente INT, p_IdTipoAbono INT, p_IdEdicion INT, p_PagoExitoso BOOLEAN
     ) RETURNS TABLE (respuesta VARCHAR)
     LANGUAGE plpgsql AS $$
     DECLARE v_resp VARCHAR;
     BEGIN
-        CALL VenderAbono(p_IdAsistente, p_IdTipoAbono, p_PagoExitoso, v_resp);
+        CALL VenderAbono(p_IdAsistente, p_IdTipoAbono, p_IdEdicion, p_PagoExitoso, v_resp);
         RETURN QUERY SELECT v_resp;
     END; $$
     """,

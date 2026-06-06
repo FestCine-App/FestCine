@@ -16,6 +16,13 @@ def _not_found(msg="No encontrado"):
 def _error(msg, status=400):
     return _json({"error": msg}, status)
 
+def _current_edicion_id():
+    """Devuelve el IdEdicion de la edición vigente (la de año más reciente).
+    Se usa para que el cliente no tenga que enviar explícitamente la edición
+    al programar proyecciones o vender abonos."""
+    r = query_one('SELECT IdEdicion FROM Ediciones ORDER BY Anio DESC LIMIT 1')
+    return r["IdEdicion"] if r else None
+
 # --- PELICULAS ---
 @csrf_exempt
 @require_http_methods(["GET", "POST", "PUT", "DELETE"])
@@ -65,8 +72,9 @@ def proyecciones(request, id=None):
     if request.method == "POST":
         data = _body(request)
         try:
-            rows = query('SELECT * FROM fn_call_programarproyeccion(%s,%s,%s,%s)',
-                (data["IdPelicula"], data["IdSala"], data["FechaHora"], data.get("TieneQA", False)))
+            id_edicion = data.get("IdEdicion") or _current_edicion_id()
+            rows = query('SELECT * FROM fn_call_programarproyeccion(%s,%s,%s,%s,%s)',
+                (data["IdPelicula"], data["IdSala"], id_edicion, data["FechaHora"], data.get("TieneQA", False)))
             msg = rows[0]["Respuesta"] if rows else ""
             if msg.startswith("Error"):
                 return _error(msg, 409)
@@ -143,9 +151,11 @@ def abonos(request):
             # con autocommit=True — evita el error "terminación de transacción
             # no válida" que ocurría al llamar fn_call_venderabono (FUNCTION
             # que internamente usaba ROLLBACK explícito).
+            id_edicion = data.get("IdEdicion") or _current_edicion_id()
             msg = call_vender_abono(
                 int(data["IdAsistente"]),
                 int(data["IdTipoAbono"]),
+                int(id_edicion),
                 bool(data.get("PagoExitoso", True))
             )
             if msg.startswith("Error"):
@@ -730,16 +740,42 @@ def reporte_premiacion(request):
 @csrf_exempt
 @require_http_methods(["GET"])
 def reporte_financiero(request):
+    # Informe unificado: desglosa el total recaudado por tipo de venta
+    # (Entrada Individual vs. Abono) y, dentro de cada tipo, por la
+    # categoría de tarifa correspondiente (Tarifa para entradas,
+    # Tipo de Abono para abonos).
     rows = query(
-        '''SELECT t.nombretarifa AS NombreTarifa,
-                  COUNT(e.identrada) AS Cantidad,
-                  SUM(t.precio) AS Subtotal
+        '''SELECT 'Entrada Individual' AS TipoVenta,
+                  t.nombretarifa        AS Categoria,
+                  COUNT(e.identrada)    AS Cantidad,
+                  COALESCE(SUM(t.precio), 0) AS Subtotal
            FROM entradas e
            INNER JOIN tarifas t ON t.idtarifa = e.idtarifa
            GROUP BY t.nombretarifa
-           ORDER BY Subtotal DESC'''
+
+           UNION ALL
+
+           SELECT 'Abono'              AS TipoVenta,
+                  ta.nombreabono        AS Categoria,
+                  COUNT(a.idabono)      AS Cantidad,
+                  COALESCE(SUM(ta.precio), 0) AS Subtotal
+           FROM abonos a
+           INNER JOIN tiposabono ta ON ta.idtipoabono = a.idtipoabono
+           WHERE a.pagado = TRUE
+           GROUP BY ta.nombreabono
+
+           ORDER BY TipoVenta, Subtotal DESC'''
     )
-    return _json([dict(r) for r in rows])
+    data = [dict(r) for r in rows]
+    total_general = sum(float(r["Subtotal"]) for r in data)
+    return _json({
+        "detalle": data,
+        "totalGeneral": total_general,
+        "totalPorTipoVenta": {
+            tv: sum(float(r["Subtotal"]) for r in data if r["TipoVenta"] == tv)
+            for tv in {r["TipoVenta"] for r in data}
+        }
+    })
 
 @csrf_exempt
 @require_http_methods(["GET"])
