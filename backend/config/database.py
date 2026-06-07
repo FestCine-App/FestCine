@@ -44,7 +44,7 @@ _COLUMN_CASE = {
     "respuesta": "Respuesta", "rol": "Rol", "sinopsis": "Sinopsis", "sitioweb": "SitioWeb",
     "telefono": "Telefono", "tieneqa": "TieneQA", "tipoaporte": "TipoAporte",
     "tipoasistente": "TipoAsistente", "tipoevento": "TipoEvento",
-    "tipotraslado": "TipoTraslado", "titulo": "Titulo",
+    "tipotraslado": "TipoTraslado", "tipoventa": "TipoVenta", "titulo": "Titulo",
     "asistentes": "Asistentes", "capacidadtotal": "CapacidadTotal", "cantidad": "Cantidad",
     "nombreasistente": "NombreAsistente", "titulopelicula": "TituloPelicula",
     "total": "Total", "entradasvendidas": "EntradasVendidas", "porcentajeocupacion": "PorcentajeOcupacion",
