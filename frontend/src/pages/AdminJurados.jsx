@@ -44,9 +44,18 @@ export default function AdminJurados() {
   const crearPremio = async (e) => {
     e.preventDefault()
     try {
-      const res = await api.createPremio({ ...formPremio, IdCategoria: parseInt(formPremio.IdCategoria), IdPelicula: parseInt(formPremio.IdPelicula) })
+      await api.createPremio({ ...formPremio, IdCategoria: parseInt(formPremio.IdCategoria), IdPelicula: parseInt(formPremio.IdPelicula) })
       setMsg('Galardón oficial otorgado exitosamente')
       setFormPremio({ IdCategoria: '', IdPelicula: '' })
+      api.getPremios().then(setPremios)
+    } catch (err) { setMsg('Error: ' + err.message) }
+  }
+
+  const eliminarPremio = async (id) => {
+    if (!window.confirm('¿Revocar este galardón? Esta acción no se puede deshacer.')) return
+    try {
+      await api.deletePremio(id)
+      setMsg('Galardón revocado correctamente')
       api.getPremios().then(setPremios)
     } catch (err) { setMsg('Error: ' + err.message) }
   }
@@ -254,11 +263,12 @@ export default function AdminJurados() {
                   <th>Categoría</th>
                   <th>Película Ganadora</th>
                   <th>Edición</th>
+                  <th style={{ textAlign: 'right' }}>Acción</th>
                 </tr>
               </thead>
               <tbody>
                 {premios.length === 0 ? (
-                  <tr><td colSpan={3} style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: 20 }}>No se registran premios para esta edición.</td></tr>
+                  <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: 20 }}>No se registran premios para esta edición.</td></tr>
                 ) : (
                   premios.map(p => (
                     <tr key={p.IdPremio}>
@@ -268,6 +278,11 @@ export default function AdminJurados() {
                         {p.Pelicula}
                       </td>
                       <td style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{p.NombreEdicion}</td>
+                      <td style={{ textAlign: 'right' }}>
+                        <button onClick={() => eliminarPremio(p.IdPremio)} className="btn" style={{ padding: '4px 10px', fontSize: 12, background: 'rgba(239,68,68,0.15)', color: '#f87171', border: '1px solid rgba(239,68,68,0.3)' }}>
+                          Revocar
+                        </button>
+                      </td>
                     </tr>
                   ))
                 )}

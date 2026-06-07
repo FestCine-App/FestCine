@@ -110,6 +110,7 @@ export const api = {
   // Premios
   getPremios: () => request('/premios/'),
   createPremio: (data) => request('/premios/', { method: 'POST', body: JSON.stringify(data) }),
+  deletePremio: (id) => request(`/premios/${id}/`, { method: 'DELETE' }),
   updatePremio: (id, data) => request(`/premios/${id}/`, { method: 'PUT', body: JSON.stringify(data) }),
   deletePremio: (id) => request(`/premios/${id}/`, { method: 'DELETE' }),
 
