@@ -29,9 +29,21 @@ def _current_edicion_id():
 def peliculas(request, id=None):
     if request.method == "GET":
         if id:
-            r = query_one('SELECT * FROM vw_Peliculas WHERE IdPelicula=%s', (id,))
+            r = query_one(
+                '''SELECT p.*, COALESCE(STRING_AGG(g.NombreGenero, ', '), '') AS Generos
+                   FROM Peliculas p
+                   LEFT JOIN PeliculaGenero pg ON pg.IdPelicula = p.IdPelicula
+                   LEFT JOIN Generos g ON g.IdGenero = pg.IdGenero
+                   WHERE p.IdPelicula=%s
+                   GROUP BY p.IdPelicula''', (id,))
             return _json(r) if r else _not_found()
-        return _json([dict(r) for r in query('SELECT * FROM vw_Peliculas ORDER BY Titulo')])
+        return _json([dict(r) for r in query(
+            '''SELECT p.*, COALESCE(STRING_AGG(g.NombreGenero, ', '), '') AS Generos
+               FROM Peliculas p
+               LEFT JOIN PeliculaGenero pg ON pg.IdPelicula = p.IdPelicula
+               LEFT JOIN Generos g ON g.IdGenero = pg.IdGenero
+               GROUP BY p.IdPelicula
+               ORDER BY p.Titulo''')])
 
     if request.method == "POST":
         data = _body(request)
@@ -386,17 +398,19 @@ def evaluaciones(request, id=None):
 
     if request.method == "POST":
         data = _body(request)
+        id_edicion = data.get("IdEdicion") or _current_edicion_id()
         r = query_one(
-            'INSERT INTO Evaluaciones (IdMiembro, IdPelicula, IdCategoria, Puntuacion, Comentario) VALUES (%s,%s,%s,%s,%s) RETURNING IdEvaluacion',
-            (data["IdMiembro"], data["IdPelicula"], data["IdCategoria"], data["Puntuacion"], data.get("Comentario"))
+            'INSERT INTO Evaluaciones (IdMiembro, IdPelicula, IdCategoria, IdEdicion, Puntuacion, Comentario) VALUES (%s,%s,%s,%s,%s,%s) RETURNING IdEvaluacion',
+            (data["IdMiembro"], data["IdPelicula"], data["IdCategoria"], id_edicion, data["Puntuacion"], data.get("Comentario"))
         )
         return _json({"id": r["IdEvaluacion"]}, 201)
 
     if request.method == "PUT":
         data = _body(request)
+        id_edicion = data.get("IdEdicion") or _current_edicion_id()
         query(
-            'UPDATE Evaluaciones SET IdMiembro=%s, IdPelicula=%s, IdCategoria=%s, Puntuacion=%s, Comentario=%s WHERE IdEvaluacion=%s',
-            (data["IdMiembro"], data["IdPelicula"], data["IdCategoria"], data["Puntuacion"], data.get("Comentario"), id)
+            'UPDATE Evaluaciones SET IdMiembro=%s, IdPelicula=%s, IdCategoria=%s, IdEdicion=%s, Puntuacion=%s, Comentario=%s WHERE IdEvaluacion=%s',
+            (data["IdMiembro"], data["IdPelicula"], data["IdCategoria"], id_edicion, data["Puntuacion"], data.get("Comentario"), id)
         )
         return _json({"message": "Actualizado"})
 
@@ -538,17 +552,19 @@ def alojamientos(request, id=None):
 
     if request.method == "POST":
         data = _body(request)
+        id_edicion = data.get("IdEdicion") or _current_edicion_id()
         r = query_one(
-            'INSERT INTO Alojamientos (IdPersonal, IdHotel, NroHabitacion, CheckIn, CheckOut) VALUES (%s,%s,%s,%s,%s) RETURNING IdAlojamiento',
-            (data["IdPersonal"], data["IdHotel"], data["NroHabitacion"], data["CheckIn"], data["CheckOut"])
+            'INSERT INTO Alojamientos (IdPersonal, IdHotel, IdEdicion, NroHabitacion, CheckIn, CheckOut) VALUES (%s,%s,%s,%s,%s,%s) RETURNING IdAlojamiento',
+            (data["IdPersonal"], data["IdHotel"], id_edicion, data["NroHabitacion"], data["CheckIn"], data["CheckOut"])
         )
         return _json({"id": r["IdAlojamiento"]}, 201)
 
     if request.method == "PUT":
         data = _body(request)
+        id_edicion = data.get("IdEdicion") or _current_edicion_id()
         query(
-            'UPDATE Alojamientos SET IdPersonal=%s, IdHotel=%s, NroHabitacion=%s, CheckIn=%s, CheckOut=%s WHERE IdAlojamiento=%s',
-            (data["IdPersonal"], data["IdHotel"], data["NroHabitacion"], data["CheckIn"], data["CheckOut"], id)
+            'UPDATE Alojamientos SET IdPersonal=%s, IdHotel=%s, IdEdicion=%s, NroHabitacion=%s, CheckIn=%s, CheckOut=%s WHERE IdAlojamiento=%s',
+            (data["IdPersonal"], data["IdHotel"], id_edicion, data["NroHabitacion"], data["CheckIn"], data["CheckOut"], id)
         )
         return _json({"message": "Actualizado"})
 
@@ -580,17 +596,19 @@ def traslados(request, id=None):
 
     if request.method == "POST":
         data = _body(request)
+        id_edicion = data.get("IdEdicion") or _current_edicion_id()
         r = query_one(
-            'INSERT INTO Traslados (IdPersonal, TipoTraslado, Origen, Destino, FechaHora, NroVuelo) VALUES (%s,%s,%s,%s,%s,%s) RETURNING IdTraslado',
-            (data["IdPersonal"], data["TipoTraslado"], data["Origen"], data["Destino"], data["FechaHora"], data.get("NroVuelo"))
+            'INSERT INTO Traslados (IdPersonal, IdEdicion, TipoTraslado, Origen, Destino, FechaHora, NroVuelo) VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING IdTraslado',
+            (data["IdPersonal"], id_edicion, data["TipoTraslado"], data["Origen"], data["Destino"], data["FechaHora"], data.get("NroVuelo"))
         )
         return _json({"id": r["IdTraslado"]}, 201)
 
     if request.method == "PUT":
         data = _body(request)
+        id_edicion = data.get("IdEdicion") or _current_edicion_id()
         query(
-            'UPDATE Traslados SET IdPersonal=%s, TipoTraslado=%s, Origen=%s, Destino=%s, FechaHora=%s, NroVuelo=%s WHERE IdTraslado=%s',
-            (data["IdPersonal"], data["TipoTraslado"], data["Origen"], data["Destino"], data["FechaHora"], data.get("NroVuelo"), id)
+            'UPDATE Traslados SET IdPersonal=%s, IdEdicion=%s, TipoTraslado=%s, Origen=%s, Destino=%s, FechaHora=%s, NroVuelo=%s WHERE IdTraslado=%s',
+            (data["IdPersonal"], id_edicion, data["TipoTraslado"], data["Origen"], data["Destino"], data["FechaHora"], data.get("NroVuelo"), id)
         )
         return _json({"message": "Actualizado"})
 
@@ -628,10 +646,10 @@ def premios(request, id=None):
 
     if request.method == "POST":
         data = _body(request)
-        # CORRECCIÓN: usa IdEdicion (FK a Ediciones) en lugar de AnioEdicion (INT suelto)
+        id_edicion = data.get("IdEdicion") or _current_edicion_id()
         r = query_one(
             'INSERT INTO Premios (IdCategoria, IdPelicula, IdEdicion) VALUES (%s,%s,%s) RETURNING IdPremio',
-            (data["IdCategoria"], data["IdPelicula"], data.get("IdEdicion", 3))
+            (data["IdCategoria"], data["IdPelicula"], id_edicion)
         )
         return _json({"id": r["IdPremio"]}, 201)
 
@@ -675,8 +693,9 @@ def competencia(request):
 
     if request.method == "POST":
         data = _body(request)
-        r = query_one('INSERT INTO CompetenciaPelicula (IdPelicula, IdCategoria) VALUES (%s,%s) RETURNING IdPelicula',
-            (data["IdPelicula"], data["IdCategoria"]))
+        id_edicion = data.get("IdEdicion") or _current_edicion_id()
+        r = query_one('INSERT INTO CompetenciaPelicula (IdPelicula, IdCategoria, IdEdicion) VALUES (%s,%s,%s) RETURNING IdPelicula',
+            (data["IdPelicula"], data["IdCategoria"], id_edicion))
         return _json({"id": r["IdPelicula"]}, 201)
 
     if request.method == "DELETE":
