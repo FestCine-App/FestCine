@@ -747,7 +747,7 @@ def reporte_ranking(request):
         '''SELECT p.titulo AS Titulo,
                   COUNT(e.identrada) AS Asistentes,
                   SUM(s.capacidad) AS CapacidadTotal,
-                  ROUND(COUNT(e.identrada) * 100.0 / NULLIF(SUM(s.capacidad), 0), 2) AS PctOcupacion
+                  ROUND(COUNT(e.identrada) * 100.0 / NULLIF(SUM(s.capacidad), 0), 2)::FLOAT AS PctOcupacion
            FROM peliculas p
            INNER JOIN proyecciones pr ON pr.idpelicula = p.idpelicula
            INNER JOIN salas s ON s.idsala = pr.idsala
@@ -764,7 +764,7 @@ def reporte_premiacion(request):
     if id_edicion:
         rows = query(
             '''SELECT c.nombrecategoria AS NombreCategoria, p.titulo AS PeliculaGanadora,
-                      ROUND(AVG(ev.puntuacion), 2) AS PromedioJurado, ed.anio AS Anio
+                      ROUND(AVG(ev.puntuacion), 2)::FLOAT AS PromedioJurado, ed.anio AS Anio
                FROM premios pre
                INNER JOIN categorias c ON c.idcategoria = pre.idcategoria
                INNER JOIN peliculas p ON p.idpelicula = pre.idpelicula
@@ -779,7 +779,7 @@ def reporte_premiacion(request):
     else:
         rows = query(
             '''SELECT c.nombrecategoria AS NombreCategoria, p.titulo AS PeliculaGanadora,
-                      ROUND(AVG(ev.puntuacion), 2) AS PromedioJurado, ed.anio AS Anio
+                      ROUND(AVG(ev.puntuacion), 2)::FLOAT AS PromedioJurado, ed.anio AS Anio
                FROM premios pre
                INNER JOIN categorias c ON c.idcategoria = pre.idcategoria
                INNER JOIN peliculas p ON p.idpelicula = pre.idpelicula
@@ -837,7 +837,7 @@ def reporte_ocupacion(request):
     rows = query(
         '''SELECT s.nombresala AS NombreSala, se.nombresede AS NombreSede, s.capacidad AS Capacidad,
                   COUNT(e.identrada) AS EntradasVendidas,
-                  ROUND(COUNT(e.identrada) * 100.0 / NULLIF(s.capacidad, 0), 2) AS PorcentajeOcupacion
+                  ROUND(COUNT(e.identrada) * 100.0 / NULLIF(s.capacidad, 0), 2)::FLOAT AS PorcentajeOcupacion
            FROM salas s
            JOIN sedes se ON se.idsede = s.idsede
            LEFT JOIN proyecciones pr ON pr.idsala = s.idsala
