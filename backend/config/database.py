@@ -78,37 +78,57 @@ def _to_dict(row, conn):
     cols = [_to_pascal(c["name"]) for c in conn.columns]
     return dict(zip(cols, row))
 
+def _is_write(sql):
+    """Devuelve True si la sentencia es de escritura (INSERT/UPDATE/DELETE/CALL)."""
+    return sql.strip().upper().startswith(('INSERT', 'UPDATE', 'DELETE', 'CALL'))
+
 def query(sql, params=None):
     conn = pg8000.native.Connection(**DB_CONFIG)
+    write = _is_write(sql)
     try:
         sql, params_dict = _convert(sql, params)
-        rows = conn.run(sql, **params_dict) if params_dict else conn.run(sql)
+        if params_dict:
+            rows = conn.run(sql, **params_dict)
+        else:
+            rows = conn.run(sql)
         result = _to_dicts(rows, conn)
-        conn.run("COMMIT")
+        if write:
+            conn.run("COMMIT")
         return result
     except Exception:
-        try: conn.run("ROLLBACK")
-        except Exception: pass
+        if write:
+            try: conn.run("ROLLBACK")
+            except Exception: pass
         raise
     finally:
-        try: conn.close()
-        except Exception: pass
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 def query_one(sql, params=None):
     conn = pg8000.native.Connection(**DB_CONFIG)
+    write = _is_write(sql)
     try:
         sql, params_dict = _convert(sql, params)
-        rows = conn.run(sql, **params_dict) if params_dict else conn.run(sql)
+        if params_dict:
+            rows = conn.run(sql, **params_dict)
+        else:
+            rows = conn.run(sql)
         result = _to_dict(rows[0], conn) if rows else None
-        conn.run("COMMIT")
+        if write:
+            conn.run("COMMIT")
         return result
     except Exception:
-        try: conn.run("ROLLBACK")
-        except Exception: pass
+        if write:
+            try: conn.run("ROLLBACK")
+            except Exception: pass
         raise
     finally:
-        try: conn.close()
-        except Exception: pass
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 def call_procedure(sql, params=None):
     return query(sql, params)
