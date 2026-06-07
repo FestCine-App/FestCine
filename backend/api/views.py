@@ -16,6 +16,17 @@ def _not_found(msg="No encontrado"):
 def _error(msg, status=400):
     return _json({"error": msg}, status)
 
+def _db_error(e):
+    """Convierte una excepción de BD en respuesta JSON amigable (nunca HTML)."""
+    msg = str(e)
+    if "unique" in msg.lower() or "duplicate" in msg.lower():
+        return _json({"error": "Ya existe un registro igual (restricción de unicidad). Verifique los datos."}, 409)
+    if "foreign key" in msg.lower() or "violates" in msg.lower():
+        return _json({"error": "Error de integridad: referencia inválida en la base de datos."}, 400)
+    if "not null" in msg.lower():
+        return _json({"error": "Faltan datos obligatorios."}, 400)
+    return _json({"error": f"Error de base de datos: {msg}"}, 500)
+
 def _current_edicion_id():
     """Devuelve el IdEdicion de la edición vigente (la de año más reciente).
     Se usa para que el cliente no tenga que enviar explícitamente la edición
@@ -398,21 +409,27 @@ def evaluaciones(request, id=None):
 
     if request.method == "POST":
         data = _body(request)
-        id_edicion = data.get("IdEdicion") or _current_edicion_id()
-        r = query_one(
-            'INSERT INTO Evaluaciones (IdMiembro, IdPelicula, IdCategoria, IdEdicion, Puntuacion, Comentario) VALUES (%s,%s,%s,%s,%s,%s) RETURNING IdEvaluacion',
-            (data["IdMiembro"], data["IdPelicula"], data["IdCategoria"], id_edicion, data["Puntuacion"], data.get("Comentario"))
-        )
-        return _json({"id": r["IdEvaluacion"]}, 201)
+        try:
+            id_edicion = data.get("IdEdicion") or _current_edicion_id()
+            r = query_one(
+                'INSERT INTO Evaluaciones (IdMiembro, IdPelicula, IdCategoria, IdEdicion, Puntuacion, Comentario) VALUES (%s,%s,%s,%s,%s,%s) RETURNING IdEvaluacion',
+                (data["IdMiembro"], data["IdPelicula"], data["IdCategoria"], id_edicion, data["Puntuacion"], data.get("Comentario"))
+            )
+            return _json({"id": r["IdEvaluacion"]}, 201)
+        except Exception as e:
+            return _db_error(e)
 
     if request.method == "PUT":
         data = _body(request)
-        id_edicion = data.get("IdEdicion") or _current_edicion_id()
-        query(
-            'UPDATE Evaluaciones SET IdMiembro=%s, IdPelicula=%s, IdCategoria=%s, IdEdicion=%s, Puntuacion=%s, Comentario=%s WHERE IdEvaluacion=%s',
-            (data["IdMiembro"], data["IdPelicula"], data["IdCategoria"], id_edicion, data["Puntuacion"], data.get("Comentario"), id)
-        )
-        return _json({"message": "Actualizado"})
+        try:
+            id_edicion = data.get("IdEdicion") or _current_edicion_id()
+            query(
+                'UPDATE Evaluaciones SET IdMiembro=%s, IdPelicula=%s, IdCategoria=%s, IdEdicion=%s, Puntuacion=%s, Comentario=%s WHERE IdEvaluacion=%s',
+                (data["IdMiembro"], data["IdPelicula"], data["IdCategoria"], id_edicion, data["Puntuacion"], data.get("Comentario"), id)
+            )
+            return _json({"message": "Actualizado"})
+        except Exception as e:
+            return _db_error(e)
 
     if request.method == "DELETE":
         query('DELETE FROM Evaluaciones WHERE IdEvaluacion=%s', (id,))
@@ -552,21 +569,27 @@ def alojamientos(request, id=None):
 
     if request.method == "POST":
         data = _body(request)
-        id_edicion = data.get("IdEdicion") or _current_edicion_id()
-        r = query_one(
-            'INSERT INTO Alojamientos (IdPersonal, IdHotel, IdEdicion, NroHabitacion, CheckIn, CheckOut) VALUES (%s,%s,%s,%s,%s,%s) RETURNING IdAlojamiento',
-            (data["IdPersonal"], data["IdHotel"], id_edicion, data["NroHabitacion"], data["CheckIn"], data["CheckOut"])
-        )
-        return _json({"id": r["IdAlojamiento"]}, 201)
+        try:
+            id_edicion = data.get("IdEdicion") or _current_edicion_id()
+            r = query_one(
+                'INSERT INTO Alojamientos (IdPersonal, IdHotel, IdEdicion, NroHabitacion, CheckIn, CheckOut) VALUES (%s,%s,%s,%s,%s,%s) RETURNING IdAlojamiento',
+                (data["IdPersonal"], data["IdHotel"], id_edicion, data["NroHabitacion"], data["CheckIn"], data["CheckOut"])
+            )
+            return _json({"id": r["IdAlojamiento"]}, 201)
+        except Exception as e:
+            return _db_error(e)
 
     if request.method == "PUT":
         data = _body(request)
-        id_edicion = data.get("IdEdicion") or _current_edicion_id()
-        query(
-            'UPDATE Alojamientos SET IdPersonal=%s, IdHotel=%s, IdEdicion=%s, NroHabitacion=%s, CheckIn=%s, CheckOut=%s WHERE IdAlojamiento=%s',
-            (data["IdPersonal"], data["IdHotel"], id_edicion, data["NroHabitacion"], data["CheckIn"], data["CheckOut"], id)
-        )
-        return _json({"message": "Actualizado"})
+        try:
+            id_edicion = data.get("IdEdicion") or _current_edicion_id()
+            query(
+                'UPDATE Alojamientos SET IdPersonal=%s, IdHotel=%s, IdEdicion=%s, NroHabitacion=%s, CheckIn=%s, CheckOut=%s WHERE IdAlojamiento=%s',
+                (data["IdPersonal"], data["IdHotel"], id_edicion, data["NroHabitacion"], data["CheckIn"], data["CheckOut"], id)
+            )
+            return _json({"message": "Actualizado"})
+        except Exception as e:
+            return _db_error(e)
 
     if request.method == "DELETE":
         query('DELETE FROM Alojamientos WHERE IdAlojamiento=%s', (id,))
@@ -596,21 +619,27 @@ def traslados(request, id=None):
 
     if request.method == "POST":
         data = _body(request)
-        id_edicion = data.get("IdEdicion") or _current_edicion_id()
-        r = query_one(
-            'INSERT INTO Traslados (IdPersonal, IdEdicion, TipoTraslado, Origen, Destino, FechaHora, NroVuelo) VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING IdTraslado',
-            (data["IdPersonal"], id_edicion, data["TipoTraslado"], data["Origen"], data["Destino"], data["FechaHora"], data.get("NroVuelo"))
-        )
-        return _json({"id": r["IdTraslado"]}, 201)
+        try:
+            id_edicion = data.get("IdEdicion") or _current_edicion_id()
+            r = query_one(
+                'INSERT INTO Traslados (IdPersonal, IdEdicion, TipoTraslado, Origen, Destino, FechaHora, NroVuelo) VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING IdTraslado',
+                (data["IdPersonal"], id_edicion, data["TipoTraslado"], data["Origen"], data["Destino"], data["FechaHora"], data.get("NroVuelo"))
+            )
+            return _json({"id": r["IdTraslado"]}, 201)
+        except Exception as e:
+            return _db_error(e)
 
     if request.method == "PUT":
         data = _body(request)
-        id_edicion = data.get("IdEdicion") or _current_edicion_id()
-        query(
-            'UPDATE Traslados SET IdPersonal=%s, IdEdicion=%s, TipoTraslado=%s, Origen=%s, Destino=%s, FechaHora=%s, NroVuelo=%s WHERE IdTraslado=%s',
-            (data["IdPersonal"], id_edicion, data["TipoTraslado"], data["Origen"], data["Destino"], data["FechaHora"], data.get("NroVuelo"), id)
-        )
-        return _json({"message": "Actualizado"})
+        try:
+            id_edicion = data.get("IdEdicion") or _current_edicion_id()
+            query(
+                'UPDATE Traslados SET IdPersonal=%s, IdEdicion=%s, TipoTraslado=%s, Origen=%s, Destino=%s, FechaHora=%s, NroVuelo=%s WHERE IdTraslado=%s',
+                (data["IdPersonal"], id_edicion, data["TipoTraslado"], data["Origen"], data["Destino"], data["FechaHora"], data.get("NroVuelo"), id)
+            )
+            return _json({"message": "Actualizado"})
+        except Exception as e:
+            return _db_error(e)
 
     if request.method == "DELETE":
         query('DELETE FROM Traslados WHERE IdTraslado=%s', (id,))
@@ -646,21 +675,27 @@ def premios(request, id=None):
 
     if request.method == "POST":
         data = _body(request)
-        id_edicion = data.get("IdEdicion") or _current_edicion_id()
-        r = query_one(
-            'INSERT INTO Premios (IdCategoria, IdPelicula, IdEdicion) VALUES (%s,%s,%s) RETURNING IdPremio',
-            (data["IdCategoria"], data["IdPelicula"], id_edicion)
-        )
-        return _json({"id": r["IdPremio"]}, 201)
+        try:
+            id_edicion = data.get("IdEdicion") or _current_edicion_id()
+            r = query_one(
+                'INSERT INTO Premios (IdCategoria, IdPelicula, IdEdicion) VALUES (%s,%s,%s) RETURNING IdPremio',
+                (data["IdCategoria"], data["IdPelicula"], id_edicion)
+            )
+            return _json({"id": r["IdPremio"]}, 201)
+        except Exception as e:
+            return _db_error(e)
 
     if request.method == "PUT":
         data = _body(request)
-        # CORRECCIÓN: usa IdEdicion (FK a Ediciones) en lugar de AnioEdicion (INT suelto)
-        query(
-            'UPDATE Premios SET IdCategoria=%s, IdPelicula=%s, IdEdicion=%s WHERE IdPremio=%s',
-            (data["IdCategoria"], data["IdPelicula"], data.get("IdEdicion", 3), id)
-        )
-        return _json({"message": "Actualizado"})
+        try:
+            id_edicion = data.get("IdEdicion") or _current_edicion_id()
+            query(
+                'UPDATE Premios SET IdCategoria=%s, IdPelicula=%s, IdEdicion=%s WHERE IdPremio=%s',
+                (data["IdCategoria"], data["IdPelicula"], id_edicion, id)
+            )
+            return _json({"message": "Actualizado"})
+        except Exception as e:
+            return _db_error(e)
 
     if request.method == "DELETE":
         query('DELETE FROM Premios WHERE IdPremio=%s', (id,))

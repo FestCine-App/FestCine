@@ -82,33 +82,33 @@ def query(sql, params=None):
     conn = pg8000.native.Connection(**DB_CONFIG)
     try:
         sql, params_dict = _convert(sql, params)
-        if params_dict:
-            rows = conn.run(sql, **params_dict)
-        else:
-            rows = conn.run(sql)
-        return _to_dicts(rows, conn)
+        rows = conn.run(sql, **params_dict) if params_dict else conn.run(sql)
+        result = _to_dicts(rows, conn)
+        conn.run("COMMIT")
+        return result
+    except Exception:
+        try: conn.run("ROLLBACK")
+        except Exception: pass
+        raise
     finally:
-        try:
-            conn.close()
-        except Exception:
-            pass
+        try: conn.close()
+        except Exception: pass
 
 def query_one(sql, params=None):
     conn = pg8000.native.Connection(**DB_CONFIG)
     try:
         sql, params_dict = _convert(sql, params)
-        if params_dict:
-            rows = conn.run(sql, **params_dict)
-        else:
-            rows = conn.run(sql)
-        if not rows:
-            return None
-        return _to_dict(rows[0], conn)
+        rows = conn.run(sql, **params_dict) if params_dict else conn.run(sql)
+        result = _to_dict(rows[0], conn) if rows else None
+        conn.run("COMMIT")
+        return result
+    except Exception:
+        try: conn.run("ROLLBACK")
+        except Exception: pass
+        raise
     finally:
-        try:
-            conn.close()
-        except Exception:
-            pass
+        try: conn.close()
+        except Exception: pass
 
 def call_procedure(sql, params=None):
     return query(sql, params)
