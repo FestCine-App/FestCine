@@ -5,8 +5,9 @@ export default function Reportes() {
   const [tab, setTab] = useState('ranking')
   const [ediciones, setEdiciones] = useState([])
   const [idEdicion, setIdEdicion] = useState('')
-  const [data, setData] = useState([])
+  const [reportes, setReportes] = useState({})
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
   useEffect(() => {
     api.getEdiciones().then(e => {
@@ -16,15 +17,34 @@ export default function Reportes() {
   }, [])
 
   useEffect(() => {
+    let cancelled = false
+
     setLoading(true)
+    setError('')
     const ed = idEdicion ? parseInt(idEdicion) : null
-    const fetchers = {
-      ranking: () => api.getRanking(ed),
-      premiacion: () => api.getPremiacion(ed),
-      financiero: () => api.getFinanciero(ed),
-      ocupacion: () => api.getOcupacionSalas(),
+    Promise.all([
+      api.getRanking(ed),
+      api.getPremiacion(ed),
+      api.getFinanciero(ed),
+      api.getOcupacionSalas(),
+    ])
+      .then(([ranking, premiacion, financiero, ocupacion]) => {
+        if (cancelled) return
+        setReportes({ ranking, premiacion, financiero, ocupacion })
+      })
+      .catch(err => {
+        if (cancelled) return
+        console.error('Error cargando reportes:', err)
+        setReportes({})
+        setError(err?.message || 'No se pudo cargar el reporte')
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    return () => {
+      cancelled = true
     }
-    fetchers[tab]().then(d => { setData(d); setLoading(false) })
   }, [tab, idEdicion])
 
   const tabs = [
@@ -74,10 +94,18 @@ export default function Reportes() {
         </div>
       ) : (
         <div className="glass-card" style={{ padding: 20 }}>
-          {tab === 'ranking' && <RankingTable data={data} />}
-          {tab === 'premiacion' && <PremiacionTable data={data} />}
-          {tab === 'financiero' && <FinancieroTable data={data} />}
-          {tab === 'ocupacion' && <OcupacionTable data={data} />}
+          {error ? (
+            <div style={{ color: 'var(--accent-amber)', fontWeight: 600 }}>
+              No se pudo cargar el reporte. {error}
+            </div>
+          ) : (
+            <>
+              {tab === 'ranking' && <RankingTable data={reportes.ranking || []} />}
+              {tab === 'premiacion' && <PremiacionTable data={reportes.premiacion || []} />}
+              {tab === 'financiero' && <FinancieroTable data={reportes.financiero || []} />}
+              {tab === 'ocupacion' && <OcupacionTable data={reportes.ocupacion || []} />}
+            </>
+          )}
         </div>
       )}
     </div>

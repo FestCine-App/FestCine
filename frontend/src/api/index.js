@@ -11,7 +11,7 @@ async function request(url, options = {}) {
     data = JSON.parse(text);
   } catch (err) {
     console.error(`Error de parsing JSON en ${url}. Respuesta recibida:`, text);
-    throw new Error(`El servidor de backend respondió con un formato incorrecto (Código ${res.status}). Asegúrate de que el servidor Django esté corriendo en http://localhost:8000 y que la base de datos esté accesible.`);
+    throw new Error(`El servidor de backend respondió con un formato incorrecto (Código ${res.status}). Asegúrate de que el servidor Django esté corriendo en http://localhost:8080 y que la base de datos esté accesible.`);
   }
   if (!res.ok) throw new Error(data.error || 'Error de red');
   return data;
