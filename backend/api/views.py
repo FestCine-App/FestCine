@@ -743,19 +743,22 @@ def competencia(request):
 @csrf_exempt
 @require_http_methods(["GET"])
 def reporte_ranking(request):
-    rows = query(
-        '''SELECT p.titulo AS Titulo,
-                  COUNT(e.identrada) AS Asistentes,
-                  SUM(s.capacidad) AS CapacidadTotal,
-                  ROUND(COUNT(e.identrada) * 100.0 / NULLIF(SUM(s.capacidad), 0), 2)::FLOAT AS PctOcupacion
-           FROM peliculas p
-           INNER JOIN proyecciones pr ON pr.idpelicula = p.idpelicula
-           INNER JOIN salas s ON s.idsala = pr.idsala
-           LEFT JOIN entradas e ON e.idproyeccion = pr.idproyeccion
-           GROUP BY p.titulo
-           ORDER BY Asistentes DESC'''
-    )
-    return _json([dict(r) for r in rows])
+    try:
+        rows = query(
+            '''SELECT p.titulo AS Titulo,
+                      COUNT(e.identrada)::INT AS Asistentes,
+                      SUM(s.capacidad)::INT AS CapacidadTotal,
+                      ROUND(COUNT(e.identrada) * 100.0 / NULLIF(SUM(s.capacidad), 0), 2)::FLOAT AS PctOcupacion
+               FROM peliculas p
+               INNER JOIN proyecciones pr ON pr.idpelicula = p.idpelicula
+               INNER JOIN salas s ON s.idsala = pr.idsala
+               LEFT JOIN entradas e ON e.idproyeccion = pr.idproyeccion
+               GROUP BY p.titulo
+               ORDER BY Asistentes DESC'''
+        )
+        return _json([dict(r) for r in rows])
+    except Exception as e:
+        return _db_error(e)
 
 @csrf_exempt
 @require_http_methods(["GET"])
@@ -798,54 +801,61 @@ def reporte_financiero(request):
     # (Entrada Individual vs. Abono) y, dentro de cada tipo, por la
     # categoría de tarifa correspondiente (Tarifa para entradas,
     # Tipo de Abono para abonos).
-    rows = query(
-        '''SELECT 'Entrada Individual' AS TipoVenta,
-                  t.nombretarifa        AS Categoria,
-                  COUNT(e.identrada)    AS Cantidad,
-                  COALESCE(SUM(t.precio), 0) AS Subtotal
-           FROM entradas e
-           INNER JOIN tarifas t ON t.idtarifa = e.idtarifa
-           GROUP BY t.nombretarifa
+    try:
+        rows = query(
+            '''SELECT 'Entrada Individual' AS TipoVenta,
+                      t.nombretarifa        AS Categoria,
+                      COUNT(e.identrada)::INT AS Cantidad,
+                      COALESCE(SUM(t.precio), 0)::FLOAT AS Subtotal
+               FROM entradas e
+               INNER JOIN tarifas t ON t.idtarifa = e.idtarifa
+               GROUP BY t.nombretarifa
 
-           UNION ALL
+               UNION ALL
 
-           SELECT 'Abono'              AS TipoVenta,
-                  ta.nombreabono        AS Categoria,
-                  COUNT(a.idabono)      AS Cantidad,
-                  COALESCE(SUM(ta.precio), 0) AS Subtotal
-           FROM abonos a
-           INNER JOIN tiposabono ta ON ta.idtipoabono = a.idtipoabono
-           WHERE a.pagado = TRUE
-           GROUP BY ta.nombreabono
+               SELECT 'Abono'              AS TipoVenta,
+                      ta.nombreabono        AS Categoria,
+                      COUNT(a.idabono)::INT AS Cantidad,
+                      COALESCE(SUM(ta.precio), 0)::FLOAT AS Subtotal
+               FROM abonos a
+               INNER JOIN tiposabono ta ON ta.idtipoabono = a.idtipoabono
+               WHERE a.pagado = TRUE
+               GROUP BY ta.nombreabono
 
-           ORDER BY TipoVenta, Subtotal DESC'''
-    )
-    data = [dict(r) for r in rows]
-    total_general = sum(float(r["Subtotal"]) for r in data)
-    return _json({
-        "detalle": data,
-        "totalGeneral": total_general,
-        "totalPorTipoVenta": {
-            tv: sum(float(r["Subtotal"]) for r in data if r["TipoVenta"] == tv)
-            for tv in {r["TipoVenta"] for r in data}
-        }
-    })
+               ORDER BY TipoVenta, Subtotal DESC'''
+        )
+        data = [dict(r) for r in rows]
+        total_general = sum(r["Subtotal"] for r in data)
+        return _json({
+            "detalle": data,
+            "totalGeneral": total_general,
+            "totalPorTipoVenta": {
+                tv: sum(r["Subtotal"] for r in data if r["TipoVenta"] == tv)
+                for tv in {r["TipoVenta"] for r in data}
+            }
+        })
+    except Exception as e:
+        return _db_error(e)
 
 @csrf_exempt
 @require_http_methods(["GET"])
 def reporte_ocupacion(request):
-    rows = query(
-        '''SELECT s.nombresala AS NombreSala, se.nombresede AS NombreSede, s.capacidad AS Capacidad,
-                  COUNT(e.identrada) AS EntradasVendidas,
-                  ROUND(COUNT(e.identrada) * 100.0 / NULLIF(s.capacidad, 0), 2)::FLOAT AS PorcentajeOcupacion
-           FROM salas s
-           JOIN sedes se ON se.idsede = s.idsede
-           LEFT JOIN proyecciones pr ON pr.idsala = s.idsala
-           LEFT JOIN entradas e ON e.idproyeccion = pr.idproyeccion
-           GROUP BY s.idsala, s.nombresala, se.nombresede, s.capacidad
-           ORDER BY PorcentajeOcupacion DESC'''
-    )
-    return _json([dict(r) for r in rows])
+    try:
+        rows = query(
+            '''SELECT s.nombresala AS NombreSala, se.nombresede AS NombreSede,
+                      s.capacidad AS Capacidad,
+                      COUNT(e.identrada)::INT AS EntradasVendidas,
+                      ROUND(COUNT(e.identrada) * 100.0 / NULLIF(s.capacidad, 0), 2)::FLOAT AS PorcentajeOcupacion
+               FROM salas s
+               JOIN sedes se ON se.idsede = s.idsede
+               LEFT JOIN proyecciones pr ON pr.idsala = s.idsala
+               LEFT JOIN entradas e ON e.idproyeccion = pr.idproyeccion
+               GROUP BY s.idsala, s.nombresala, se.nombresede, s.capacidad
+               ORDER BY PorcentajeOcupacion DESC'''
+        )
+        return _json([dict(r) for r in rows])
+    except Exception as e:
+        return _db_error(e)
 
 @csrf_exempt
 @require_http_methods(["GET"])
