@@ -259,15 +259,19 @@ def eventos(request, id=None):
         return _json([dict(r) for r in rows])
 
     if request.method == "POST":
-        data = _body(request)
-        r = query_one(
-            'INSERT INTO EventosParalelos (NombreEvento, TipoEvento, FechaHora, Aforo, CostoInscripcion) VALUES (%s,%s,%s,%s,%s) RETURNING IdEvento',
-            (data["NombreEvento"], data["TipoEvento"], data["FechaHora"], data["Aforo"], data.get("CostoInscripcion", 0))
-        )
-        eid = r["IdEvento"]
-        for p in data.get("expositores", []):
-            query('INSERT INTO ExpositorEvento (IdEvento, IdPersonal) VALUES (%s,%s)', (eid, p))
-        return _json({"id": eid}, 201)
+        try:
+            data = _body(request)
+            id_edicion = data.get("IdEdicion") or _current_edicion_id()
+            r = query_one(
+                'INSERT INTO EventosParalelos (IdEdicion, NombreEvento, TipoEvento, FechaHora, Aforo, CostoInscripcion) VALUES (%s,%s,%s,%s,%s,%s) RETURNING IdEvento',
+                (id_edicion, data["NombreEvento"], data["TipoEvento"], data["FechaHora"], data["Aforo"], data.get("CostoInscripcion", 0))
+            )
+            eid = r["IdEvento"]
+            for p in data.get("expositores", []):
+                query('INSERT INTO ExpositorEvento (IdEvento, IdPersonal) VALUES (%s,%s)', (eid, p))
+            return _json({"id": eid}, 201)
+        except Exception as e:
+            return _db_error(e)
 
     if request.method == "PUT":
         data = _body(request)
@@ -331,6 +335,26 @@ def categorias(request, id=None):
         if id:
             r = query_one('SELECT * FROM Categorias WHERE IdCategoria=%s', (id,))
             return _json(r) if r else _not_found()
+        jurado_id = request.GET.get('jurado')
+        categoria_id = request.GET.get('categoria')
+        if jurado_id:
+            rows = query('''
+                SELECT c.IdCategoria, c.NombreCategoria
+                FROM JuradoCategoria jc
+                JOIN Categorias c ON c.IdCategoria = jc.IdCategoria
+                WHERE jc.IdMiembro = %s
+                ORDER BY c.NombreCategoria
+            ''', [jurado_id])
+            return _json([dict(r) for r in rows])
+        if categoria_id:
+            rows = query('''
+                SELECT p.IdPelicula, p.Titulo
+                FROM CompetenciaPelicula cp
+                JOIN Peliculas p ON p.IdPelicula = cp.IdPelicula
+                WHERE cp.IdCategoria = %s
+                ORDER BY p.Titulo
+            ''', [categoria_id])
+            return _json([dict(r) for r in rows])
         return _json([dict(r) for r in query('SELECT * FROM Categorias ORDER BY NombreCategoria')])
 
     if request.method == "POST":

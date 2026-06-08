@@ -12,6 +12,8 @@ export default function AdminJurados() {
   const [formJ, setFormJ] = useState({ Nombre: '', Profesion: '', Pais: '', Email: '' })
   const [formEval, setFormEval] = useState({ IdMiembro: '', IdPelicula: '', IdCategoria: '', Puntuacion: '5', Comentario: '' })
   const [formPremio, setFormPremio] = useState({ IdCategoria: '', IdPelicula: '' })
+  const [categoriasFiltradas, setCategoriasFiltradas] = useState([])
+  const [peliculasFiltradas, setPeliculasFiltradas] = useState([])
   const [msg, setMsg] = useState('')
 
   useEffect(() => {
@@ -31,12 +33,41 @@ export default function AdminJurados() {
     } catch (err) { setMsg('Error: ' + err.message) }
   }
 
+  const handleJuradoChange = async (e) => {
+    const id = e.target.value
+    setFormEval({ ...formEval, IdMiembro: id, IdCategoria: '', IdPelicula: '' })
+    setCategoriasFiltradas([])
+    setPeliculasFiltradas([])
+    if (id) {
+      const cats = await api.getCategoriasPorJurado(id)
+      setCategoriasFiltradas(cats)
+    }
+  }
+
+  const handleCategoriaChange = async (e) => {
+    const id = e.target.value
+    setFormEval({ ...formEval, IdCategoria: id, IdPelicula: '' })
+    setPeliculasFiltradas([])
+    if (id) {
+      const pels = await api.getPeliculasPorCategoria(id)
+      setPeliculasFiltradas(pels)
+    }
+  }
+
   const crearEvaluacion = async (e) => {
     e.preventDefault()
     try {
-      const res = await api.createEvaluacion({ ...formEval, IdMiembro: parseInt(formEval.IdMiembro), IdPelicula: parseInt(formEval.IdPelicula), IdCategoria: parseInt(formEval.IdCategoria), Puntuacion: parseInt(formEval.Puntuacion) })
+      const res = await api.createEvaluacion({
+        ...formEval,
+        IdMiembro: parseInt(formEval.IdMiembro),
+        IdPelicula: parseInt(formEval.IdPelicula),
+        IdCategoria: parseInt(formEval.IdCategoria),
+        IdEdicion: 1,
+        Puntuacion: parseInt(formEval.Puntuacion)
+      })
       setMsg('Evaluación del jurado registrada exitosamente')
       setFormEval({ IdMiembro: '', IdPelicula: '', IdCategoria: '', Puntuacion: '5', Comentario: '' })
+      setCategoriasFiltradas([])
       api.getEvaluaciones().then(setEvaluaciones)
     } catch (err) { setMsg('Error: ' + err.message) }
   }
@@ -155,7 +186,7 @@ export default function AdminJurados() {
             <form onSubmit={crearEvaluacion}>
               <div className="form-group">
                 <label className="form-label">Miembro de Jurado *</label>
-                <select className="select" value={formEval.IdMiembro} onChange={e => setFormEval({ ...formEval, IdMiembro: e.target.value })} required>
+                <select className="select" value={formEval.IdMiembro} onChange={handleJuradoChange} required>
                   <option value="">Seleccione jurado...</option>
                   {jurados.map(j => <option key={j.IdMiembro} value={j.IdMiembro}>{j.Nombre}</option>)}
                 </select>
@@ -164,16 +195,16 @@ export default function AdminJurados() {
               <div className="form-group">
                 <label className="form-label">Película *</label>
                 <select className="select" value={formEval.IdPelicula} onChange={e => setFormEval({ ...formEval, IdPelicula: e.target.value })} required>
-                  <option value="">Seleccione película...</option>
-                  {peliculas.map(p => <option key={p.IdPelicula} value={p.IdPelicula}>{p.Titulo}</option>)}
+                  <option value="">{formEval.IdCategoria ? 'Seleccione película...' : 'Primero seleccione categoría'}</option>
+                  {peliculasFiltradas.map(p => <option key={p.IdPelicula} value={p.IdPelicula}>{p.Titulo}</option>)}
                 </select>
               </div>
 
               <div className="form-group">
                 <label className="form-label">Categoría Competitiva *</label>
-                <select className="select" value={formEval.IdCategoria} onChange={e => setFormEval({ ...formEval, IdCategoria: e.target.value })} required>
-                  <option value="">Seleccione categoría...</option>
-                  {categorias.map(c => <option key={c.IdCategoria} value={c.IdCategoria}>{c.NombreCategoria}</option>)}
+                <select className="select" value={formEval.IdCategoria} onChange={handleCategoriaChange} required>
+                  <option value="">{formEval.IdMiembro ? 'Seleccione categoría...' : 'Primero seleccione un jurado'}</option>
+                  {categoriasFiltradas.map(c => <option key={c.IdCategoria} value={c.IdCategoria}>{c.NombreCategoria}</option>)}
                 </select>
               </div>
 
