@@ -75,6 +75,8 @@ export const api = {
 
   // Categorias
   getCategorias: () => request('/categorias/'),
+  getCategoriasPorJurado: (idMiembro) => request(`/categorias/?jurado=${idMiembro}`),
+  getPeliculasPorCategoria: (idCategoria) => request(`/categorias/?categoria=${idCategoria}`),
   createCategoria: (data) => request('/categorias/', { method: 'POST', body: JSON.stringify(data) }),
   updateCategoria: (id, data) => request(`/categorias/${id}/`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteCategoria: (id) => request(`/categorias/${id}/`, { method: 'DELETE' }),
