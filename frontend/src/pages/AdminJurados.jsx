@@ -9,12 +9,15 @@ export default function AdminJurados() {
   const [premios, setPremios] = useState([])
   const [ediciones, setEdiciones] = useState([])
   const [tab, setTab] = useState('jurados')
-  const [formJ, setFormJ] = useState({ Nombre: '', Profesion: '', Pais: '', Email: '' })
-  const [formEval, setFormEval] = useState({ IdMiembro: '', IdPelicula: '', IdCategoria: '', Puntuacion: '5', Comentario: '' })
-  const [formPremio, setFormPremio] = useState({ IdCategoria: '', IdPelicula: '' })
+  const [formJ, setFormJ] = useState({ Nombre: '', Profesion: '', Pais: '', Email: '', IdEdicion: '' })
+  const [formJCategorias, setFormJCategorias] = useState([])
+  const [formEval, setFormEval] = useState({ IdEdicion: '', IdMiembro: '', IdPelicula: '', IdCategoria: '', Puntuacion: '5', Comentario: '' })
+  const [formPremio, setFormPremio] = useState({ IdEdicion: '', IdCategoria: '', IdPelicula: '' })
   const [categoriasFiltradas, setCategoriasFiltradas] = useState([])
   const [peliculasFiltradas, setPeliculasFiltradas] = useState([])
+  const [peliculasPremio, setPeliculasPremio] = useState([])
   const [msg, setMsg] = useState('')
+
 
   useEffect(() => {
     Promise.all([
@@ -25,12 +28,24 @@ export default function AdminJurados() {
 
   const crearJurado = async (e) => {
     e.preventDefault()
-    try { 
-      const r = await api.createJurado?.(formJ) || await (await fetch('/api/jurados', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formJ) })).json()
+    try {
+      const r = await api.createJurado({ ...formJ, IdEdicion: parseInt(formJ.IdEdicion) })
+      const id = typeof r === 'object' ? r.id : r
+      for (const cId of formJCategorias) {
+        await api.addCategoriaJurado({ IdMiembro: id, IdCategoria: parseInt(cId) })
+      }
       setMsg('Miembro del jurado registrado exitosamente')
-      setFormJ({ Nombre: '', Profesion: '', Pais: '', Email: '' })
+      setFormJ({ Nombre: '', Profesion: '', Pais: '', Email: '', IdEdicion: '' })
+      setFormJCategorias([])
       api.getJurados().then(setJurados)
     } catch (err) { setMsg('Error: ' + err.message) }
+  }
+
+  const handleEdicionChange = (e) => {
+    const id = e.target.value
+    setFormEval({ ...formEval, IdEdicion: id, IdCategoria: '', IdPelicula: '' })
+    setCategoriasFiltradas([])
+    setPeliculasFiltradas([])
   }
 
   const handleJuradoChange = async (e) => {
@@ -48,8 +63,8 @@ export default function AdminJurados() {
     const id = e.target.value
     setFormEval({ ...formEval, IdCategoria: id, IdPelicula: '' })
     setPeliculasFiltradas([])
-    if (id) {
-      const pels = await api.getPeliculasPorCategoria(id)
+    if (id && formEval.IdEdicion) {
+      const pels = await api.getPeliculasPorCategoria(id, formEval.IdEdicion)
       setPeliculasFiltradas(pels)
     }
   }
@@ -62,22 +77,44 @@ export default function AdminJurados() {
         IdMiembro: parseInt(formEval.IdMiembro),
         IdPelicula: parseInt(formEval.IdPelicula),
         IdCategoria: parseInt(formEval.IdCategoria),
-        IdEdicion: 1,
+        IdEdicion: parseInt(formEval.IdEdicion),
         Puntuacion: parseInt(formEval.Puntuacion)
       })
       setMsg('Evaluación del jurado registrada exitosamente')
-      setFormEval({ IdMiembro: '', IdPelicula: '', IdCategoria: '', Puntuacion: '5', Comentario: '' })
+      setFormEval({ IdEdicion: formEval.IdEdicion, IdMiembro: '', IdPelicula: '', IdCategoria: '', Puntuacion: '5', Comentario: '' })
       setCategoriasFiltradas([])
+      setPeliculasFiltradas([])
       api.getEvaluaciones().then(setEvaluaciones)
     } catch (err) { setMsg('Error: ' + err.message) }
+  }
+
+  const handlePremioEdicionChange = (e) => {
+    const id = e.target.value
+    setFormPremio({ IdEdicion: id, IdCategoria: '', IdPelicula: '' })
+    setPeliculasPremio([])
+  }
+
+  const handlePremioCategoriaChange = async (e) => {
+    const id = e.target.value
+    setFormPremio({ ...formPremio, IdCategoria: id, IdPelicula: '' })
+    setPeliculasPremio([])
+    if (id && formPremio.IdEdicion) {
+      const pels = await api.getPeliculasPorCategoria(id, formPremio.IdEdicion)
+      setPeliculasPremio(pels)
+    }
   }
 
   const crearPremio = async (e) => {
     e.preventDefault()
     try {
-      await api.createPremio({ ...formPremio, IdCategoria: parseInt(formPremio.IdCategoria), IdPelicula: parseInt(formPremio.IdPelicula) })
+      await api.createPremio({
+        IdCategoria: parseInt(formPremio.IdCategoria),
+        IdPelicula: parseInt(formPremio.IdPelicula),
+        IdEdicion: parseInt(formPremio.IdEdicion),
+      })
       setMsg('Galardón oficial otorgado exitosamente')
-      setFormPremio({ IdCategoria: '', IdPelicula: '' })
+      setFormPremio({ IdEdicion: '', IdCategoria: '', IdPelicula: '' })
+      setPeliculasPremio([])
       api.getPremios().then(setPremios)
     } catch (err) { setMsg('Error: ' + err.message) }
   }
@@ -88,6 +125,15 @@ export default function AdminJurados() {
       await api.deletePremio(id)
       setMsg('Galardón revocado correctamente')
       api.getPremios().then(setPremios)
+    } catch (err) { setMsg('Error: ' + err.message) }
+  }
+
+  const eliminarEvaluacion = async (id) => {
+    if (!window.confirm('¿Desea eliminar esta evaluación y puntuación?')) return
+    try {
+      await api.deleteEvaluacion(id)
+      setMsg('Evaluación eliminada correctamente')
+      api.getEvaluaciones().then(setEvaluaciones)
     } catch (err) { setMsg('Error: ' + err.message) }
   }
 
@@ -144,6 +190,27 @@ export default function AdminJurados() {
                 <label className="form-label">Email de Contacto</label>
                 <input placeholder="Ej. jdoe@jurado-festcine.org" type="email" className="input" value={formJ.Email} onChange={e => setFormJ({ ...formJ, Email: e.target.value })} />
               </div>
+              <div className="form-group">
+                <label className="form-label">Edición a Evaluar *</label>
+                <select className="select" value={formJ.IdEdicion} onChange={e => { setFormJ({ ...formJ, IdEdicion: e.target.value }); setFormJCategorias([]) }} required>
+                  <option value="">Seleccione edición...</option>
+                  {ediciones.map(e => <option key={e.IdEdicion} value={e.IdEdicion}>{e.NombreEdicion}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Categorías a Evaluar *</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {categorias.map(c => (
+                    <label key={c.IdCategoria} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+                      <input type="checkbox" checked={formJCategorias.includes(c.IdCategoria)} onChange={e => {
+                        if (e.target.checked) setFormJCategorias([...formJCategorias, c.IdCategoria])
+                        else setFormJCategorias(formJCategorias.filter(id => id !== c.IdCategoria))
+                      }} />
+                      {c.NombreCategoria}
+                    </label>
+                  ))}
+                </div>
+              </div>
               <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: 12 }}>
                 Registrar Jurado
               </button>
@@ -158,11 +225,12 @@ export default function AdminJurados() {
                   <th>Profesión</th>
                   <th>País de Origen</th>
                   <th>Contacto</th>
+                  <th>Edición Asignada</th>
                 </tr>
               </thead>
               <tbody>
                 {jurados.length === 0 ? (
-                  <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: 20 }}>No hay miembros de jurado registrados.</td></tr>
+                  <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: 20 }}>No hay miembros de jurado registrados.</td></tr>
                 ) : (
                   jurados.map(j => (
                     <tr key={j.IdMiembro}>
@@ -170,6 +238,7 @@ export default function AdminJurados() {
                       <td>{j.Profesion || '-'}</td>
                       <td>{j.Pais || '-'}</td>
                       <td style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{j.Email || '-'}</td>
+                      <td><span className="badge badge-postulada">{j.EdicionNombre || '—'}</span></td>
                     </tr>
                   ))
                 )}
@@ -184,6 +253,14 @@ export default function AdminJurados() {
           <div className="glass-card">
             <h3 style={{ fontSize: 18, marginBottom: 16 }}>Calificar Película</h3>
             <form onSubmit={crearEvaluacion}>
+              <div className="form-group">
+                <label className="form-label">Edición del Festival *</label>
+                <select className="select" value={formEval.IdEdicion} onChange={handleEdicionChange} required>
+                  <option value="">Seleccione edición...</option>
+                  {ediciones.map(e => <option key={e.IdEdicion} value={e.IdEdicion}>{e.NombreEdicion}</option>)}
+                </select>
+              </div>
+
               <div className="form-group">
                 <label className="form-label">Miembro de Jurado *</label>
                 <select className="select" value={formEval.IdMiembro} onChange={handleJuradoChange} required>
@@ -233,11 +310,12 @@ export default function AdminJurados() {
                   <th>Película</th>
                   <th>Categoría</th>
                   <th style={{ textAlign: 'right' }}>Puntuación</th>
+                  <th style={{ textAlign: 'center' }}>Acciones</th>
                 </tr>
               </thead>
               <tbody>
                 {evaluaciones.length === 0 ? (
-                  <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: 20 }}>No se registran calificaciones oficiales de películas.</td></tr>
+                  <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: 20 }}>No se registran calificaciones oficiales de películas.</td></tr>
                 ) : (
                   evaluaciones.map(e => (
                     <tr key={e.IdEvaluacion}>
@@ -248,6 +326,11 @@ export default function AdminJurados() {
                       </td>
                       <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--accent-amber)' }}>
                         ★ {e.Puntuacion}/10
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <button onClick={() => eliminarEvaluacion(e.IdEvaluacion)} className="btn" style={{ padding: '4px 10px', fontSize: 12, background: 'rgba(239,68,68,0.15)', color: '#f87171', border: '1px solid rgba(239,68,68,0.3)' }}>
+                          🗑️ Eliminar
+                        </button>
                       </td>
                     </tr>
                   ))
@@ -264,8 +347,16 @@ export default function AdminJurados() {
             <h3 style={{ fontSize: 18, marginBottom: 16 }}>Declarar Ganador</h3>
             <form onSubmit={crearPremio}>
               <div className="form-group">
+                <label className="form-label">Edición del Festival *</label>
+                <select className="select" value={formPremio.IdEdicion} onChange={handlePremioEdicionChange} required>
+                  <option value="">Seleccione edición...</option>
+                  {ediciones.map(e => <option key={e.IdEdicion} value={e.IdEdicion}>{e.NombreEdicion}</option>)}
+                </select>
+              </div>
+
+              <div className="form-group">
                 <label className="form-label">Categoría del Galardón *</label>
-                <select className="select" value={formPremio.IdCategoria} onChange={e => setFormPremio({ ...formPremio, IdCategoria: e.target.value })} required>
+                <select className="select" value={formPremio.IdCategoria} onChange={handlePremioCategoriaChange} required>
                   <option value="">Seleccione categoría...</option>
                   {categorias.map(c => <option key={c.IdCategoria} value={c.IdCategoria}>{c.NombreCategoria}</option>)}
                 </select>
@@ -274,12 +365,10 @@ export default function AdminJurados() {
               <div className="form-group">
                 <label className="form-label">Película Ganadora *</label>
                 <select className="select" value={formPremio.IdPelicula} onChange={e => setFormPremio({ ...formPremio, IdPelicula: e.target.value })} required>
-                  <option value="">Seleccione película...</option>
-                  {peliculas.map(p => <option key={p.IdPelicula} value={p.IdPelicula}>{p.Titulo}</option>)}
+                  <option value="">{formPremio.IdCategoria ? 'Seleccione película...' : 'Primero seleccione categoría'}</option>
+                  {peliculasPremio.map(p => <option key={p.IdPelicula} value={p.IdPelicula}>{p.Titulo}</option>)}
                 </select>
               </div>
-
-
 
               <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: 12 }}>
                 Otorgar Premio
@@ -306,7 +395,7 @@ export default function AdminJurados() {
                       <td style={{ fontWeight: 600 }}>{p.NombreCategoria}</td>
                       <td>
                         <span className="badge badge-premiada" style={{ marginRight: 8 }}>🏆 PREMIO</span>
-                        {p.Pelicula}
+                        {p.TituloPelicula}
                       </td>
                       <td style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{p.NombreEdicion}</td>
                       <td style={{ textAlign: 'right' }}>

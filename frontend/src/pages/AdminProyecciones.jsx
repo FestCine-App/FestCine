@@ -5,24 +5,25 @@ export default function AdminProyecciones() {
   const [proyecciones, setProyecciones] = useState([])
   const [peliculas, setPeliculas] = useState([])
   const [salas, setSalas] = useState([])
-  const [form, setForm] = useState({ IdPelicula: '', IdSala: '', FechaHora: '', TieneQA: false })
+  const [ediciones, setEdiciones] = useState([])
+  const [form, setForm] = useState({ IdPelicula: '', IdSala: '', IdEdicion: '', FechaHora: '', TieneQA: false })
   const [msg, setMsg] = useState('')
   const [isError, setIsError] = useState(false)
 
   const load = () => api.getProyecciones().then(setProyecciones)
   useEffect(() => {
     load()
-    Promise.all([api.getPeliculas(), api.getSalas()])
-      .then(([p, s]) => { setPeliculas(p); setSalas(s) })
+    Promise.all([api.getPeliculas(), api.getSalas(), api.getEdiciones()])
+      .then(([p, s, e]) => { setPeliculas(p); setSalas(s); setEdiciones(e) })
   }, [])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     try {
-      const res = await api.createProyeccion({ ...form, IdPelicula: parseInt(form.IdPelicula), IdSala: parseInt(form.IdSala) })
+      const res = await api.createProyeccion({ ...form, IdPelicula: parseInt(form.IdPelicula), IdSala: parseInt(form.IdSala), IdEdicion: parseInt(form.IdEdicion) })
       setMsg(res.message || 'Proyección programada exitosamente')
       setIsError(false)
-      setForm({ IdPelicula: '', IdSala: '', FechaHora: '', TieneQA: false })
+      setForm({ IdPelicula: '', IdSala: '', IdEdicion: '', FechaHora: '', TieneQA: false })
       load()
     } catch (err) {
       setMsg(err.message)
@@ -75,6 +76,14 @@ export default function AdminProyecciones() {
             </div>
 
 
+
+            <div className="form-group">
+              <label className="form-label">Edición del Festival *</label>
+              <select className="select" value={form.IdEdicion} onChange={e => setForm({ ...form, IdEdicion: e.target.value })} required>
+                <option value="">Seleccione edición...</option>
+                {ediciones.map(e => <option key={e.IdEdicion} value={e.IdEdicion}>{e.NombreEdicion}</option>)}
+              </select>
+            </div>
 
             <div className="form-group">
               <label className="form-label">Fecha y Hora *</label>

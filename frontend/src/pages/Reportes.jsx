@@ -26,7 +26,7 @@ export default function Reportes() {
       api.getRanking(ed),
       api.getPremiacion(ed),
       api.getFinanciero(ed),
-      api.getOcupacionSalas(),
+      api.getOcupacionSalas(ed),
     ])
       .then(([ranking, premiacion, financiero, ocupacion]) => {
         if (cancelled) return
@@ -63,15 +63,13 @@ export default function Reportes() {
             Monitoree la asistencia, premiaciones, finanzas y ocupación física de salas.
           </p>
         </div>
-        {tab !== 'ocupacion' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>Edición:</span>
-            <select value={idEdicion} onChange={e => setIdEdicion(e.target.value)} className="select" style={{ width: 220, padding: '8px 12px' }}>
-              <option value="">Todas las ediciones</option>
-              {ediciones.map(e => <option key={e.IdEdicion} value={e.IdEdicion}>{e.NombreEdicion}</option>)}
-            </select>
-          </div>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>Edición:</span>
+          <select value={idEdicion} onChange={e => setIdEdicion(e.target.value)} className="select" style={{ width: 220, padding: '8px 12px' }}>
+            <option value="">Todas las ediciones</option>
+            {ediciones.map(e => <option key={e.IdEdicion} value={e.IdEdicion}>{e.NombreEdicion}</option>)}
+          </select>
+        </div>
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap' }}>
@@ -135,7 +133,7 @@ function RankingTable({ data }) {
                 <td>{r.CapacidadTotal}</td>
                 <td style={{ textAlign: 'right' }}>
                   <span className={`badge ${r.PctOcupacion >= 80 ? 'badge-premiada' : r.PctOcupacion >= 50 ? 'badge-seleccionada' : 'badge-postulada'}`}>
-                    {r.PctOcupacion}%
+                    {Math.round(r.PctOcupacion)}%
                   </span>
                 </td>
               </tr>
@@ -171,7 +169,9 @@ function PremiacionTable({ data }) {
                   {r.PeliculaGanadora}
                 </td>
                 <td>
-                  <span style={{ color: 'var(--accent-amber)', fontWeight: 700 }}>★ {parseFloat(r.PromedioJurado).toFixed(2)}</span>
+                  <span style={{ color: r.PromedioJurado != null && !isNaN(r.PromedioJurado) ? 'var(--accent-amber)' : 'var(--text-secondary)', fontWeight: 700 }}>
+                    {r.PromedioJurado != null && !isNaN(r.PromedioJurado) ? `★ ${parseFloat(r.PromedioJurado).toFixed(2)}` : 'Sin evaluar'}
+                  </span>
                 </td>
                 <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>{r.Anio}</td>
               </tr>
@@ -273,7 +273,7 @@ function OcupacionTable({ data }) {
                 <td>{r.EntradasVendidas}</td>
                 <td style={{ textAlign: 'right' }}>
                   <span className={`badge ${r.PorcentajeOcupacion >= 80 ? 'badge-premiada' : r.PorcentajeOcupacion >= 50 ? 'badge-seleccionada' : 'badge-postulada'}`}>
-                    {r.PorcentajeOcupacion}%
+                    {Math.round(r.PorcentajeOcupacion)}%
                   </span>
                 </td>
               </tr>

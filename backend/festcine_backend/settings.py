@@ -79,7 +79,16 @@ WSGI_APPLICATION = 'festcine_backend.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-DATABASES = {}  # Using pg8000 direct queries, no ORM
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'festcine',
+        'USER': 'postgres',
+        'PASSWORD': '141279',
+        'HOST': 'localhost',
+        'PORT': 5432,
+    }
+}
 
 
 # Password validation

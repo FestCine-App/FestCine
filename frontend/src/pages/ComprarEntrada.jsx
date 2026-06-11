@@ -1,14 +1,15 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import api from '../api'
 
 export default function ComprarEntrada() {
   const [asistentes, setAsistentes] = useState([])
+  const [peliculas, setPeliculas] = useState([])
   const [proyecciones, setProyecciones] = useState([])
   const [eventos, setEventos] = useState([])
   const [tarifas, setTarifas] = useState([])
   
-  const [ticketType, setTicketType] = useState('cine') // 'cine' or 'evento'
-  const [form, setForm] = useState({ IdAsistente: '', IdProyeccion: '', IdEvento: '', IdTarifa: '' })
+  const [ticketType, setTicketType] = useState('cine')
+  const [form, setForm] = useState({ IdAsistente: '', IdPelicula: '', IdProyeccion: '', IdEvento: '', IdTarifa: '' })
   const [msg, setMsg] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -16,11 +17,13 @@ export default function ComprarEntrada() {
   useEffect(() => {
     Promise.all([
       api.getAsistentes(),
+      api.getPeliculas(),
       api.getProyecciones(),
       api.getEventos(),
       api.getTarifas()
-    ]).then(([a, p, e, t]) => {
+    ]).then(([a, pel, p, e, t]) => {
       setAsistentes(a)
+      setPeliculas(pel)
       setProyecciones(p)
       setEventos(e)
       setTarifas(t)
@@ -29,13 +32,23 @@ export default function ComprarEntrada() {
     })
   }, [])
 
+  const proyeccionesConPelicula = useMemo(() => {
+    const pelMap = {}
+    peliculas.forEach(pel => { pelMap[pel.IdPelicula] = pel.Titulo })
+    return proyecciones.map(p => ({
+      ...p,
+      TituloPelicula: pelMap[p.IdPelicula] || p.Titulo
+    }))
+  }, [proyecciones, peliculas])
+
+  const proyeccionesFiltradas = useMemo(() => {
+    if (!form.IdPelicula) return []
+    return proyeccionesConPelicula.filter(p => p.IdPelicula === parseInt(form.IdPelicula))
+  }, [form.IdPelicula, proyeccionesConPelicula])
+
   const handleTypeChange = (type) => {
     setTicketType(type)
-    setForm(prev => ({
-      ...prev,
-      IdProyeccion: '',
-      IdEvento: ''
-    }))
+    setForm({ IdAsistente: '', IdPelicula: '', IdProyeccion: '', IdEvento: '', IdTarifa: '' })
   }
 
   const handleSubmit = async (e) => {
@@ -52,14 +65,14 @@ export default function ComprarEntrada() {
 
       if (ticketType === 'cine') {
         if (!form.IdProyeccion) {
-          setError('Por favor seleccione una proyección cinematográfica.')
+          setError('Por favor seleccione una proyección.')
           setLoading(false)
           return
         }
         payload.IdProyeccion = parseInt(form.IdProyeccion)
       } else {
         if (!form.IdEvento) {
-          setError('Por favor seleccione un evento paralelo.')
+          setError('Por favor seleccione un evento.')
           setLoading(false)
           return
         }
@@ -68,12 +81,16 @@ export default function ComprarEntrada() {
 
       const res = await api.comprarEntrada(payload)
       setMsg(res.message)
-      setForm({ IdAsistente: '', IdProyeccion: '', IdEvento: '', IdTarifa: '' })
-      
-      // Reload screenings to update aforo
-      api.getProyecciones().then(setProyecciones)
+      setForm({ IdAsistente: '', IdPelicula: '', IdProyeccion: '', IdEvento: '', IdTarifa: '' })
+      api.getProyecciones().then(p => {
+        setProyecciones(p)
+      })
     } catch (err) {
-      setError(err.message)
+      if (err.message && err.message.toLowerCase().includes('aforo')) {
+        setError('La sala está llena. No hay aforo disponible para esta función.')
+      } else {
+        setError(err.message)
+      }
     } finally {
       setLoading(false)
     }
@@ -135,25 +152,45 @@ export default function ComprarEntrada() {
           </div>
 
           {ticketType === 'cine' ? (
-            <div className="form-group">
-              <label className="form-label">Proyección Cinematográfica *</label>
-              <select className="select" value={form.IdProyeccion} onChange={e => setForm({ ...form, IdProyeccion: e.target.value })} required>
-                <option value="">Seleccione función...</option>
-                {proyecciones.filter(p => p.AforoDisponible > 0).map(p => (
-                  <option key={p.IdProyeccion} value={p.IdProyeccion}>
-                    {p.Titulo} — {p.NombreSede} / {p.NombreSala} ({new Date(p.FechaHora).toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}) · [Aforo: {p.AforoDisponible}]
+            <>
+              <div className="form-group">
+                <label className="form-label">Película *</label>
+                <select className="select" value={form.IdPelicula} onChange={e => setForm({ ...form, IdPelicula: e.target.value, IdProyeccion: '' })} required>
+                  <option value="">Seleccione película...</option>
+                  {peliculas.map(pel => (
+                    <option key={pel.IdPelicula} value={pel.IdPelicula}>
+                      {pel.Titulo}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Función Disponible *</label>
+                <select className="select" value={form.IdProyeccion} onChange={e => setForm({ ...form, IdProyeccion: e.target.value })} required={!!form.IdPelicula}>
+                  <option value="">
+                    {!form.IdPelicula
+                      ? 'Primero seleccione una película'
+                      : proyeccionesFiltradas.length === 0
+                        ? 'No hay funciones disponibles para esta película'
+                        : 'Seleccione función...'}
                   </option>
-                ))}
-              </select>
-            </div>
+                  {proyeccionesFiltradas.map(p => (
+                    <option key={p.IdProyeccion} value={p.IdProyeccion}>
+                      {p.NombreSede} / {p.NombreSala} — {new Date(p.FechaHora).toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} · {p.AforoDisponible > 0 ? `[Aforo: ${p.AforoDisponible}]` : '[SALA LLENA]'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
           ) : (
             <div className="form-group">
               <label className="form-label">Evento Paralelo / Taller *</label>
               <select className="select" value={form.IdEvento} onChange={e => setForm({ ...form, IdEvento: e.target.value })} required>
                 <option value="">Seleccione evento...</option>
+                {eventos.length === 0 &&                 <option disabled>No hay eventos disponibles</option>}
                 {eventos.map(ev => (
                   <option key={ev.IdEvento} value={ev.IdEvento}>
-                    [{ev.TipoEvento}] {ev.NombreEvento} — Costo: Bs. {ev.CostoInscripcion} ({new Date(ev.FechaHora).toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })})
+                    [{ev.TipoEvento}] {ev.NombreEvento} — Costo: Bs. {ev.CostoInscripcion ?? '0.00'} ({new Date(ev.FechaHora).toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })})
                   </option>
                 ))}
               </select>

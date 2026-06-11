@@ -76,7 +76,11 @@ export const api = {
   // Categorias
   getCategorias: () => request('/categorias/'),
   getCategoriasPorJurado: (idMiembro) => request(`/categorias/?jurado=${idMiembro}`),
-  getPeliculasPorCategoria: (idCategoria) => request(`/categorias/?categoria=${idCategoria}`),
+  getPeliculasPorCategoria: (idCategoria, idEdicion) => {
+    let url = `/categorias/?categoria=${idCategoria}`;
+    if (idEdicion) url += `&id_edicion=${idEdicion}`;
+    return request(url);
+  },
   createCategoria: (data) => request('/categorias/', { method: 'POST', body: JSON.stringify(data) }),
   updateCategoria: (id, data) => request(`/categorias/${id}/`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteCategoria: (id) => request(`/categorias/${id}/`, { method: 'DELETE' }),
@@ -86,6 +90,11 @@ export const api = {
   createJurado: (data) => request('/jurados/', { method: 'POST', body: JSON.stringify(data) }),
   updateJurado: (id, data) => request(`/jurados/${id}/`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteJurado: (id) => request(`/jurados/${id}/`, { method: 'DELETE' }),
+
+  // Asignaciones y Categorias de Jurados
+  getAsignacionesJurado: (idJurado, idEdicion) => request(`/jurados/asignaciones/?id_jurado=${idJurado}&id_edicion=${idEdicion}`),
+  addCategoriaJurado: (data) => request('/jurados/categorias/', { method: 'POST', body: JSON.stringify(data) }),
+  removeCategoriaJurado: (idMiembro, idCategoria) => request(`/jurados/categorias/?id_miembro=${idMiembro}&id_categoria=${idCategoria}`, { method: 'DELETE' }),
 
   // Evaluaciones
   getEvaluaciones: () => request('/evaluaciones/'),
@@ -153,7 +162,7 @@ export const api = {
   getRanking: (idEdicion) => idEdicion ? request(`/reportes/ranking/?id_edicion=${idEdicion}`) : request('/reportes/ranking/'),
   getPremiacion: (idEdicion) => idEdicion ? request(`/reportes/premiacion/?id_edicion=${idEdicion}`) : request('/reportes/premiacion/'),
   getFinanciero: (idEdicion) => idEdicion ? request(`/reportes/financiero/?id_edicion=${idEdicion}`) : request('/reportes/financiero/'),
-  getOcupacionSalas: () => request('/reportes/ocupacion-salas/'),
+  getOcupacionSalas: (idEdicion) => idEdicion ? request(`/reportes/ocupacion-salas/?id_edicion=${idEdicion}`) : request('/reportes/ocupacion-salas/'),
   getVentasEdicion: (id) => request(`/reportes/ventas-edicion/${id}/`),
 };
 

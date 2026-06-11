@@ -4,23 +4,32 @@ import api from '../api'
 export default function AdminPeliculas() {
   const [peliculas, setPeliculas] = useState([])
   const [generos, setGeneros] = useState([])
-  const [form, setForm] = useState({ Titulo: '', AnioProd: '', Duracion: '', PaisOrigen: '', Sinopsis: '', Clasificacion: 'PG', Formato: 'Digital', Estado: 'Postulada', generos: [] })
+  const [ediciones, setEdiciones] = useState([])
+  const [categorias, setCategorias] = useState([])
+  const [form, setForm] = useState({ Titulo: '', AnioProd: '', Duracion: '', PaisOrigen: '', Sinopsis: '', Clasificacion: 'PG', Formato: 'Digital', Estado: 'Postulada', generos: [], IdEdicion: '', categorias: [] })
   const [editing, setEditing] = useState(null)
   const [msg, setMsg] = useState('')
 
   const load = () => api.getPeliculas().then(setPeliculas)
-  useEffect(() => { load(); api.getGeneros().then(setGeneros) }, [])
+  useEffect(() => { load(); api.getGeneros().then(setGeneros); api.getEdiciones().then(setEdiciones); api.getCategorias().then(setCategorias) }, [])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    const payload = {
+      ...form,
+      AnioProd: parseInt(form.AnioProd),
+      Duracion: parseInt(form.Duracion),
+      IdEdicion: parseInt(form.IdEdicion),
+      categorias: form.categorias.map(Number),
+    }
     try {
       if (editing) {
-        await api.updatePelicula(editing, { ...form, AnioProd: parseInt(form.AnioProd), Duracion: parseInt(form.Duracion) })
+        await api.updatePelicula(editing, payload)
       } else {
-        await api.createPelicula({ ...form, AnioProd: parseInt(form.AnioProd), Duracion: parseInt(form.Duracion) })
+        await api.createPelicula(payload)
       }
       setMsg('Película guardada exitosamente')
-      setForm({ Titulo: '', AnioProd: '', Duracion: '', PaisOrigen: '', Sinopsis: '', Clasificacion: 'PG', Formato: 'Digital', Estado: 'Postulada', generos: [] })
+      setForm({ Titulo: '', AnioProd: '', Duracion: '', PaisOrigen: '', Sinopsis: '', Clasificacion: 'PG', Formato: 'Digital', Estado: 'Postulada', generos: [], IdEdicion: '', categorias: [] })
       setEditing(null)
       load()
     } catch (err) { setMsg('Error: ' + err.message) }
@@ -33,12 +42,25 @@ export default function AdminPeliculas() {
     }))
   }
 
-  const edit = (p) => {
+  const handleDelete = async (id) => {
+    if (!window.confirm('¿Está seguro de eliminar esta película? Se eliminarán también sus proyecciones, evaluaciones y premios asociados.')) return
+    try {
+      await api.deletePelicula(id)
+      setMsg('Película eliminada exitosamente')
+      load()
+    } catch (err) { setMsg('Error: ' + err.message) }
+  }
+
+  const edit = async (p) => {
     setEditing(p.IdPelicula)
+    const cp = await api.getCompetencia()
+    const catsPeli = cp.filter(x => x.IdPelicula === p.IdPelicula)
+    const edId = catsPeli.length > 0 ? catsPeli[0].IdEdicion : ''
     setForm({
       Titulo: p.Titulo, AnioProd: String(p.AnioProd), Duracion: String(p.Duracion),
       PaisOrigen: p.PaisOrigen, Sinopsis: p.Sinopsis || '', Clasificacion: p.Clasificacion,
-      Formato: p.Formato, Estado: p.Estado, generos: p.Generos ? p.Generos.split(', ').map(g => generos.find(ge => ge.NombreGenero === g)?.IdGenero).filter(Boolean) : []
+      Formato: p.Formato, Estado: p.Estado, generos: p.Generos ? p.Generos.split(', ').map(g => generos.find(ge => ge.NombreGenero === g)?.IdGenero).filter(Boolean) : [],
+      IdEdicion: edId, categorias: catsPeli.map(x => x.IdCategoria)
     })
   }
 
@@ -77,6 +99,26 @@ export default function AdminPeliculas() {
             <div className="form-group">
               <label className="form-label">País de Origen *</label>
               <input placeholder="Ej. Bolivia" className="input" value={form.PaisOrigen} onChange={e => setForm({ ...form, PaisOrigen: e.target.value })} required />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Edición del Festival *</label>
+              <select className="select" value={form.IdEdicion} onChange={e => setForm({ ...form, IdEdicion: e.target.value, categorias: [] })} required>
+                <option value="">Seleccione edición...</option>
+                {ediciones.map(e => <option key={e.IdEdicion} value={e.IdEdicion}>{e.NombreEdicion}</option>)}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Categorías en Competencia *</label>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, background: 'rgba(0,0,0,0.2)', padding: 12, borderRadius: 8, border: '1px solid rgba(255,255,255,0.04)' }}>
+                {categorias.map(c => (
+                  <label key={c.IdCategoria} style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                    <input type="checkbox" checked={form.categorias.includes(c.IdCategoria)} onChange={() => setForm(prev => ({ ...prev, categorias: prev.categorias.includes(c.IdCategoria) ? prev.categorias.filter(id => id !== c.IdCategoria) : [...prev.categorias, c.IdCategoria] }))} style={{ accentColor: 'var(--accent-purple)' }} />
+                    {c.NombreCategoria}
+                  </label>
+                ))}
+              </div>
             </div>
 
             <div className="grid-3" style={{ marginBottom: 16 }}>
@@ -120,7 +162,7 @@ export default function AdminPeliculas() {
             <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
               <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>{editing ? 'Actualizar' : 'Crear Película'}</button>
               {editing && (
-                <button type="button" className="btn btn-secondary" onClick={() => { setEditing(null); setForm({ Titulo: '', AnioProd: '', Duracion: '', PaisOrigen: '', Sinopsis: '', Clasificacion: 'PG', Formato: 'Digital', Estado: 'Postulada', generos: [] }) }}>
+                <button type="button" className="btn btn-secondary" onClick={() => { setEditing(null); setForm({ Titulo: '', AnioProd: '', Duracion: '', PaisOrigen: '', Sinopsis: '', Clasificacion: 'PG', Formato: 'Digital', Estado: 'Postulada', generos: [], IdEdicion: '', categorias: [] }) }}>
                   Cancelar
                 </button>
               )}
@@ -157,9 +199,12 @@ export default function AdminPeliculas() {
                       {p.Estado}
                     </span>
                   </td>
-                  <td style={{ textAlign: 'right' }}>
+                  <td style={{ textAlign: 'right', display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
                     <button onClick={() => edit(p)} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: 12 }}>
                       Editar
+                    </button>
+                    <button onClick={() => handleDelete(p.IdPelicula)} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: 12, background: 'rgba(244, 63, 94, 0.2)', borderColor: 'rgba(244, 63, 94, 0.3)', color: '#fb7185' }}>
+                      Eliminar
                     </button>
                   </td>
                 </tr>

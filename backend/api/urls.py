@@ -31,6 +31,8 @@ urlpatterns = [
     path('categorias/', views.categorias, name='categorias-list'),
     re_path(r'^categorias/(?P<id>\d+)/$', views.categorias, name='categorias-detail'),
 
+    path('jurados/asignaciones/', views.jurados_asignaciones, name='jurados-asignaciones'),
+    path('jurados/categorias/', views.jurados_categorias, name='jurados-categorias'),
     path('jurados/', views.jurados, name='jurados-list'),
     re_path(r'^jurados/(?P<id>\d+)/$', views.jurados, name='jurados-detail'),
 
