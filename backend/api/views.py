@@ -4,7 +4,7 @@ from datetime import datetime
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from django.db import transaction
+from django.db import transaction, connection
 from django.utils import timezone
 from django.db.models import Count, Sum, F, FloatField, Value, Case, When, Subquery, OuterRef, Avg, DecimalField, CharField, Q
 from django.db.models.functions import Coalesce
@@ -210,45 +210,26 @@ def entradas(request):
         data = _body(request)
         try:
             if data.get("IdProyeccion"):
-                with transaction.atomic():
-                    proyeccion = models.Proyeccion.objects.select_for_update().get(
-                        IdProyeccion=data["IdProyeccion"]
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT respuesta FROM fn_call_comprarentrada(%s, %s, %s)",
+                        [data["IdAsistente"], data["IdProyeccion"], data["IdTarifa"]]
                     )
-                    if proyeccion.AforoDisponible <= 0:
-                        raise Exception("No hay aforo disponible para esta funcion.")
-                    if models.Entrada.objects.filter(
-                        IdAsistente=data["IdAsistente"], IdProyeccion=data["IdProyeccion"]
-                    ).exists():
-                        raise Exception("El asistente ya tiene una entrada para esta proyeccion.")
-                    models.Entrada.objects.create(
-                        IdAsistente_id=data["IdAsistente"],
-                        IdProyeccion_id=data["IdProyeccion"],
-                        IdTarifa_id=data["IdTarifa"],
-                        FechaCompra=timezone.now(),
-                    )
-                    models.Proyeccion.objects.filter(IdProyeccion=data["IdProyeccion"]).update(
-                        AforoDisponible=F('AforoDisponible') - 1
-                    )
-                return _json({"message": "Entrada registrada exitosamente."}, 201)
+                    resultado = cursor.fetchone()[0]
+                    if resultado.startswith("Error") or resultado.startswith("Lo sentimos"):
+                        return _error(resultado)
+                return _json({"message": resultado}, 201)
 
             elif data.get("IdEvento"):
-                evento = models.EventoParalelo.objects.get(IdEvento=data["IdEvento"])
-                inscritos = models.Entrada.objects.filter(IdEvento=data["IdEvento"]).count()
-                if inscritos >= evento.Aforo:
-                    return _error(f'Aforo agotado para "{evento.NombreEvento}".')
-                if not models.Tarifa.objects.filter(IdTarifa=data["IdTarifa"]).exists():
-                    return _error("Tarifa no valida.")
-                if models.Entrada.objects.filter(
-                    IdAsistente=data["IdAsistente"], IdEvento=data["IdEvento"]
-                ).exists():
-                    return _error("El asistente ya esta registrado en este evento.")
-                models.Entrada.objects.create(
-                    IdAsistente_id=data["IdAsistente"],
-                    IdEvento=data["IdEvento"],
-                    IdTarifa_id=data["IdTarifa"],
-                    FechaCompra=timezone.now(),
-                )
-                return _json({"message": f'Registro exitoso en "{evento.NombreEvento}".'}, 201)
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT respuesta FROM fn_call_comprarentradaevento(%s, %s, %s)",
+                        [data["IdAsistente"], data["IdEvento"], data["IdTarifa"]]
+                    )
+                    resultado = cursor.fetchone()[0]
+                    if resultado.startswith("Error") or resultado.startswith("Lo sentimos"):
+                        return _error(resultado)
+                return _json({"message": resultado}, 201)
 
             else:
                 return _error("Debe especificar una proyeccion o un evento")
@@ -271,24 +252,16 @@ def abonos(request):
     if request.method == "POST":
         data = _body(request)
         try:
-            if not models.TipoAbono.objects.filter(IdTipoAbono=data["IdTipoAbono"]).exists():
-                return _error("El tipo de abono indicado no existe.")
-            if not models.Asistente.objects.filter(IdAsistente=data["IdAsistente"]).exists():
-                return _error("El asistente indicado no existe.")
-            if not data.get("PagoExitoso", True):
-                return _error("Pasarela de pago fallida. Operacion cancelada.")
             id_edicion = data.get("IdEdicion") or _current_edicion_id()
-            year = datetime.now().year
-            codigo = f"AB-{year}-{random.randint(10000, 99999)}"
-            models.Abono.objects.create(
-                IdAsistente=data["IdAsistente"],
-                IdTipoAbono_id=data["IdTipoAbono"],
-                IdEdicion_id=id_edicion,
-                CodigoAcceso=codigo,
-                Pagado=True,
-                FechaCompra=timezone.now(),
-            )
-            return _json({"message": f"Abono registrado. Cod. acceso: {codigo}"}, 201)
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT respuesta FROM fn_call_venderabono(%s, %s, %s, %s)",
+                    [data["IdAsistente"], data["IdTipoAbono"], id_edicion, data.get("PagoExitoso", True)]
+                )
+                resultado = cursor.fetchone()[0]
+                if resultado.startswith("Error") or resultado.startswith("Lo sentimos") or resultado.startswith("Pasarela"):
+                    return _error(resultado)
+            return _json({"message": resultado}, 201)
         except Exception as e:
             return _error(str(e).split("\n")[0])
 
