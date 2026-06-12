@@ -66,11 +66,11 @@ urlpatterns = [
 
 
     path('tarifas/', views.tarifas, name='tarifas'),
-    path('tipos-abono/', views.tiposabono, name='tiposabono'),
+    path('tipos-abono/', views.tipos_abono, name='tiposabono'),
 
     path('reportes/ranking/', views.reporte_ranking, name='reporte-ranking'),
     path('reportes/premiacion/', views.reporte_premiacion, name='reporte-premiacion'),
     path('reportes/financiero/', views.reporte_financiero, name='reporte-financiero'),
-    path('reportes/ocupacion-salas/', views.reporte_ocupacion, name='reporte-ocupacion'),
+    path('reportes/ocupacion-salas/', views.reporte_ocupacion_salas, name='reporte-ocupacion'),
     re_path(r'^reportes/ventas-edicion/(?P<id>\d+)/$', views.reporte_ventas_edicion, name='reporte-ventas'),
 ]
